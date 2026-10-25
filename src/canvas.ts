@@ -1,7 +1,7 @@
 import {Deck, OrthographicView, COORDINATE_SYSTEM} from '@deck.gl/core/typed'
 import {PathLayer, PolygonLayer, TextLayer} from '@deck.gl/layers/typed'
 import {GeomNode, Graph} from '@msagl/core'
-import {CameraPosition, MIN_SCALE, ZoomMotion, wheelZoomFactor} from './camera'
+import {CameraPosition, MIN_SCALE, ZoomMotion, wheelZoomFactor, originalWheelZoomFactor, zoomImmediately} from './camera'
 import {ArrowItem, EdgeItem, NodeItem, ShadowItem, Scene, Theme, PALETTES, createScene, styleScene} from './scene'
 import {exportSvg} from './svg-export'
 
@@ -38,6 +38,7 @@ export class GraphCanvas {
   private deck: Deck | null = null
   private camera: CameraPosition = {scale: 1, x: 0, y: 0}
   private zoomMotion = new ZoomMotion()
+  private improvedScrolling = true
   private animationFrame = 0
   private frameTime = 0
   private animateFrame = this.onAnimationFrame.bind(this)
@@ -139,8 +140,23 @@ export class GraphCanvas {
 
   zoom(factor: number, px?: number, py?: number) {
     const rect = this.container.getBoundingClientRect()
-    this.zoomMotion.queue(this.camera, factor, px ?? rect.width / 2, py ?? rect.height / 2)
-    this.requestFrame()
+    const x = px ?? rect.width / 2
+    const y = py ?? rect.height / 2
+    if (this.improvedScrolling) {
+      this.zoomMotion.queue(this.camera, factor, x, y)
+      this.requestFrame()
+    } else {
+      zoomImmediately(this.camera, factor, x, y)
+      this.updateCamera()
+    }
+  }
+
+  get scrollingImprovements(): boolean { return this.improvedScrolling }
+
+  setScrollingImprovements(enabled: boolean) {
+    this.improvedScrolling = enabled
+    // Stop at the currently displayed position when switching modes mid-gesture.
+    this.zoomMotion.cancel()
   }
 
   resetZoom() {
@@ -175,6 +191,15 @@ export class GraphCanvas {
   private onAnimationFrame(time: number) {
     this.animationFrame = 0
     this.zoomMotion.advance(this.camera, time - this.frameTime, this.reducedMotion.matches)
+    this.updateCamera()
+    if (this.zoomMotion.active) {
+      this.frameTime = time
+      this.animationFrame = requestAnimationFrame(this.animateFrame)
+    }
+  }
+
+  private updateCamera() {
+    if (!this.deck) return
     const box = this.container.getBoundingClientRect()
     const {x, y, scale} = this.camera
     // Camera changes update projection uniforms; graph buffers and glyph atlases stay on the GPU.
@@ -190,10 +215,6 @@ export class GraphCanvas {
       this.minimapViewport.setAttribute('y', String(top))
       this.minimapViewport.setAttribute('width', String(Math.max(0, right - left)))
       this.minimapViewport.setAttribute('height', String(Math.max(0, bottom - top)))
-    }
-    if (this.zoomMotion.active) {
-      this.frameTime = time
-      this.animationFrame = requestAnimationFrame(this.animateFrame)
     }
   }
 
@@ -212,7 +233,10 @@ export class GraphCanvas {
   private onWheel(event: WheelEvent) {
     event.preventDefault()
     const box = this.container.getBoundingClientRect()
-    this.zoom(wheelZoomFactor(event.deltaY, event.deltaMode, box.height), event.clientX - box.left, event.clientY - box.top)
+    const factor = this.improvedScrolling
+      ? wheelZoomFactor(event.deltaY, event.deltaMode, box.height)
+      : originalWheelZoomFactor(event.deltaY)
+    this.zoom(factor, event.clientX - box.left, event.clientY - box.top)
   }
 
   private onPointerDown(event: PointerEvent) {
@@ -233,7 +257,8 @@ export class GraphCanvas {
     this.camera.y += dy
     this.pointer.x = event.clientX
     this.pointer.y = event.clientY
-    this.requestFrame()
+    if (this.improvedScrolling) this.requestFrame()
+    else this.updateCamera()
   }
 
   private onPointerUp(event: PointerEvent) {

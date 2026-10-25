@@ -13,6 +13,17 @@ export function wheelZoomFactor(delta: number, mode: number, pageHeight: number)
   return Math.exp(-Math.max(-240, Math.min(240, pixels)) * 0.0015)
 }
 
+export function originalWheelZoomFactor(delta: number): number {
+  return Math.exp(-Math.max(-200, Math.min(200, delta)) * 0.003)
+}
+
+export function zoomImmediately(camera: CameraPosition, factor: number, x: number, y: number) {
+  const scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, camera.scale * factor))
+  camera.x = x - (x - camera.x) * scale / camera.scale
+  camera.y = y - (y - camera.y) * scale / camera.scale
+  camera.scale = scale
+}
+
 /** Keeps wheel bursts continuous while preserving the graph point under the cursor. */
 export class ZoomMotion {
   private target: number | null = null

@@ -312,6 +312,13 @@ function onCameraChange(event: Event) {
   if (value.textContent !== label) value.textContent = label
 }
 
+function toggleScrollingImprovements() {
+  const enabled = !canvas.scrollingImprovements
+  canvas.setScrollingImprovements(enabled)
+  element('scroll-improvements').setAttribute('aria-checked', String(enabled))
+  element('scroll-improvements-state').textContent = enabled ? 'On' : 'Off'
+}
+
 function showOpenDialog() {
   clearErrors()
   openDialog.showModal()
@@ -355,6 +362,7 @@ async function onDocumentClick(event: MouseEvent) {
     case 'zoom-in': canvas.zoom(1.3); break
     case 'zoom-out': canvas.zoom(1 / 1.3); break
     case 'actual-size': canvas.resetZoom(); break
+    case 'scroll-improvements': toggleScrollingImprovements(); break
     case 'clear-selection': clearSelection(); break
     case 'focus-selection': focusSelectedNode(); break
     case 'copy-selection': await copySelection(); break
