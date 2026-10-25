@@ -22,7 +22,7 @@ Set `PORT` to choose a different port.
 - Paste DOT, load a direct file URL, or edit the current source.
 - Search labels, node IDs, and addresses; follow incoming/outgoing connections.
 - Pan, zoom around the pointer, fit the graph, or navigate with the overview.
-- Compare scrolling live with the **Scroll improvements** switch above the zoom controls:
+- Compare scrolling live with the **Smooth scrolling** switch above the zoom controls:
   on uses smooth, gentler zoom; off restores the original immediate zoom and wheel sensitivity.
 - WebGL rendering for nodes, edges, arrowheads, shadows, and text using deck.gl.
 - Light/dark mode with a saved preference and theme-aware graph colors.
