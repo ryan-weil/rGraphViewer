@@ -1,0 +1,20 @@
+digraph control_flow {
+  node [shape=box, style=filled];
+  start [label="Entry point", shape=oval, fillcolor="#bde7d5"];
+  read [label="Read input\nLoad the next instruction", fillcolor="#dce5ff"];
+  check [label="Validate input", shape=diamond, fillcolor="#ffdfab"];
+  process [label="Process instruction\nUpdate program state", fillcolor="#dce5ff"];
+  recover [label="Handle error\nRecord diagnostic", fillcolor="#ffd6d6"];
+  merge [label="Continue execution", fillcolor="#dce5ff"];
+  again [label="More instructions?", shape=diamond, fillcolor="#ffdfab"];
+  finish [label="Return result", shape=oval, fillcolor="#bde7d5"];
+  start -> read;
+  read -> check;
+  check -> process [label="Valid"];
+  check -> recover [label="Invalid"];
+  process -> merge;
+  recover -> merge;
+  merge -> again;
+  again -> read [label="Next"];
+  again -> finish [label="Done"];
+}

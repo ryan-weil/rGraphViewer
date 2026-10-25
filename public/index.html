@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#f7f8fc" />
+  <meta name="description" content="A focused DOT graph viewer. Explore, search, and trace graphs with clean right-angle routing. Your files stay in your browser." />
+  <title>rGraphViewer</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="./app.css" />
+</head>
+<body>
+  <svg class="icon-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7V5h6l2 2h10v13H3z"/><path d="M3 10h18"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H5v18h14V8zM14 3v5h5M8 12h8M8 16h5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-fit" viewBox="0 0 24 24"><path d="M4 9V4h5m6 0h5v5m0 6v5h-5M9 20H4v-5"/><rect x="8" y="8" width="8" height="8" rx="1"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 14.1A9 9 0 0 1 9.9 3.5a9 9 0 1 0 10.6 10.6Z"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="m8 6-6 6 6 6m8-12 6 6-6 6M14 3l-4 18"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+    <symbol id="i-nodes" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="6" rx="1.5"/><rect x="2" y="16" width="6" height="6" rx="1.5"/><rect x="16" y="16" width="6" height="6" rx="1.5"/><path d="M12 8v4H5v4m7-4h7v4"/></symbol>
+    <symbol id="i-route" viewBox="0 0 24 24"><circle cx="5" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="M5 7v10h14v-5H9V5h8"/></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 8a2.5 2.5 0 1 1 4 2c-1.5 1-1.5 1.5-1.5 3m0 3h.01"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="m10 14 4-4m-5-4 2-2a5 5 0 0 1 7 7l-2 2m-1 5-2 2a5 5 0 0 1-7-7l2-2"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V3H3v13h5"/></symbol>
+    <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+  </defs></svg>
+
+  <header class="app-header">
+    <div class="brand"><img src="./favicon.svg" alt="" width="32" height="32" /><span><b>r</b>GraphViewer</span></div>
+    <div class="header-divider"></div>
+    <div class="workspace-name"><span class="muted">Workspace</span><svg class="icon tiny"><use href="#i-chevron"/></svg><span id="header-file">Loading graph…</span></div>
+    <div class="header-actions">
+      <button class="icon-button mobile-toggle" data-action="sidebar" aria-label="Toggle node explorer" title="Node explorer"><svg class="icon"><use href="#i-panel"/></svg></button>
+      <button class="button ghost source-button" data-action="source" title="View and edit graph source"><svg class="icon"><use href="#i-code"/></svg><span>Source</span></button>
+      <button class="button ghost export-button" data-action="export"><svg class="icon"><use href="#i-download"/></svg><span>Export SVG</span></button>
+      <span class="action-divider"></span>
+      <button id="theme-toggle" class="icon-button" data-action="theme" aria-label="Switch to dark mode" title="Switch theme"><svg class="icon"><use id="theme-icon" href="#i-moon"/></svg></button>
+      <button class="button primary" data-action="open" data-load><svg class="icon"><use href="#i-folder"/></svg><span>Open graph</span></button>
+    </div>
+  </header>
+
+  <div class="workspace">
+    <aside id="sidebar" class="sidebar" aria-label="Node explorer">
+      <div class="graph-summary">
+        <div class="eyebrow">CURRENT GRAPH <span id="file-kind" class="file-kind">DOT</span></div>
+        <div class="file-title"><div class="file-icon"><svg class="icon"><use href="#i-file"/></svg></div><div class="file-copy"><strong id="graph-name">Loading…</strong><span id="graph-origin">Browser workspace</span></div></div>
+        <div class="graph-counts"><span><b id="node-count">—</b> nodes</span><i></i><span><b id="edge-count">—</b> edges</span></div>
+      </div>
+      <div class="explorer-heading"><h2>Nodes</h2><span id="result-count" class="count-badge">0</span></div>
+      <label class="search-box"><svg class="icon"><use href="#i-search"/></svg><input id="node-search" type="search" placeholder="Find a node or address…" aria-label="Find a node or address" autocomplete="off" spellcheck="false" /><kbd>/</kbd></label>
+      <div id="node-list" class="node-list" aria-label="Graph nodes"></div>
+      <div class="sidebar-footer"><span><span class="privacy-dot"></span>Files stay in your browser</span><button class="icon-button small" data-action="help" aria-label="Keyboard shortcuts" title="Keyboard shortcuts"><svg class="icon"><use href="#i-help"/></svg></button></div>
+    </aside>
+
+    <main id="canvas-area" class="canvas-area" aria-label="Graph workspace">
+      <div class="canvas-top"><div class="mode-label"><svg class="icon"><use href="#i-route"/></svg><span>Top to bottom</span><i></i><span>Right-angle edges</span></div><button class="button compact floating" data-action="fit" title="Fit graph (F)"><svg class="icon"><use href="#i-fit"/></svg>Fit graph</button></div>
+      <div id="graph-canvas" tabindex="0" role="img" aria-label="Interactive graph. Drag to pan, scroll to zoom, or select nodes in the explorer."></div>
+      <div class="canvas-bottom"><div class="canvas-hint"><span class="hint-dot"></span>Drag to pan<span class="hint-divider">·</span>Scroll to zoom</div>
+        <div class="zoom-control floating"><button data-action="zoom-out" class="icon-button" aria-label="Zoom out" title="Zoom out (-)"><svg class="icon"><use href="#i-minus"/></svg></button><button data-action="actual-size" id="zoom-value" class="zoom-value" title="Reset to 100%">100%</button><button data-action="zoom-in" class="icon-button" aria-label="Zoom in" title="Zoom in (+)"><svg class="icon"><use href="#i-plus"/></svg></button><span></span><button data-action="fit" class="icon-button" aria-label="Fit graph" title="Fit graph (F)"><svg class="icon"><use href="#i-fit"/></svg></button></div>
+      </div>
+      <div class="minimap floating"><div class="minimap-label">OVERVIEW<svg class="icon tiny"><use href="#i-nodes"/></svg></div><svg id="minimap" aria-label="Graph overview. Click to navigate." role="img"></svg></div>
+      <div id="loading" class="loading-overlay" hidden><div class="loading-card floating"><div class="spinner"></div><strong>Arranging your graph</strong><span>Finding clear paths between nodes…</span></div></div>
+      <div id="drop-overlay" class="drop-overlay" hidden><svg class="icon"><use href="#i-upload"/></svg><strong>Drop to open your graph</strong><span>DOT, GV, or JSON</span></div>
+    </main>
+
+    <aside id="inspector" class="inspector" aria-label="Selection details" hidden>
+      <div class="inspector-heading"><span class="eyebrow" id="selection-kind">NODE DETAILS</span><button data-action="clear-selection" class="icon-button small" aria-label="Close details"><svg class="icon"><use href="#i-close"/></svg></button></div>
+      <div id="selection-details"></div>
+    </aside>
+  </div>
+  <footer class="status-bar"><div><span id="status-dot" class="status-dot"></span><span id="status-text" role="status">Ready</span></div><span class="status-description">rGraphViewer <span class="muted">/</span> Local-first graph exploration</span></footer>
+
+  <div id="toast" class="toast" role="alert" hidden><span id="toast-text"></span><button class="icon-button small" data-action="dismiss-toast" aria-label="Dismiss message"><svg class="icon"><use href="#i-close"/></svg></button></div>
+  <input type="file" id="file-input" accept=".dot,.gv,.json" hidden />
+
+  <dialog id="open-dialog" class="modal">
+    <div class="modal-header"><div><h1>Open a graph</h1><p>A new perspective on your connections.</p></div><button class="icon-button" data-action="close-dialog" aria-label="Close dialog"><svg class="icon"><use href="#i-close"/></svg></button></div>
+    <div class="dialog-tabs" role="tablist" aria-label="Open graph from"><button role="tab" aria-selected="true" data-tab="file">Local file</button><button role="tab" aria-selected="false" data-tab="paste">Paste DOT</button><button role="tab" aria-selected="false" data-tab="url">From URL</button></div>
+    <section data-tab-panel="file" class="file-panel"><div class="upload-illustration"><svg class="icon"><use href="#i-upload"/></svg></div><h2>Drop your graph here</h2><p>DOT, GV, or JSON. Everything runs in your browser.</p><button class="button primary" data-action="choose-file" data-load><svg class="icon"><use href="#i-folder"/></svg>Choose file</button><div class="sample-link">Just exploring? <button class="text-button" data-action="demo" data-load>Open the example graph <span>↗</span></button></div></section>
+    <section data-tab-panel="paste" hidden><label class="field-label" for="paste-source">DOT source</label><textarea id="paste-source" class="code-editor paste-editor" spellcheck="false" placeholder="digraph {&#10;  start -> process;&#10;  process -> finish;&#10;}"></textarea><div class="modal-footer"><span>Supports directed and undirected graphs</span><button class="button primary" data-action="load-paste" data-load>Open graph<svg class="icon"><use href="#i-arrow"/></svg></button></div></section>
+    <section data-tab-panel="url" hidden><label class="field-label" for="graph-url">Graph URL</label><input type="url" id="graph-url" class="text-input" placeholder="https://example.com/graph.dot" /><p class="field-note">Use a direct link to a DOT or JSON file. The server must allow browser access (CORS).</p><div class="modal-footer"><span>Loaded directly from the URL</span><button class="button primary" data-action="load-url" data-load>Open graph<svg class="icon"><use href="#i-arrow"/></svg></button></div></section>
+    <p class="dialog-error" id="open-error" role="alert" hidden></p>
+  </dialog>
+
+  <dialog id="source-dialog" class="modal source-modal"><div class="modal-header"><div><h1>Graph source</h1><p id="source-name">Edit DOT and redraw the graph.</p></div><button class="icon-button" data-action="close-dialog" aria-label="Close source"><svg class="icon"><use href="#i-close"/></svg></button></div><label class="sr-only" for="source-editor">Graph source</label><textarea id="source-editor" class="code-editor" spellcheck="false"></textarea><p class="dialog-error" id="source-error" role="alert" hidden></p><div class="modal-footer"><button class="button ghost" data-action="download-source"><svg class="icon"><use href="#i-download"/></svg>Save source</button><button class="button primary" data-action="apply-source" data-load>Apply changes<svg class="icon"><use href="#i-arrow"/></svg></button></div></dialog>
+
+  <dialog id="help-dialog" class="modal help-modal"><div class="modal-header"><div><h1>Make yourself at home</h1><p>A few shortcuts to move around faster.</p></div><button class="icon-button" data-action="close-dialog" aria-label="Close shortcuts"><svg class="icon"><use href="#i-close"/></svg></button></div><div class="shortcut-list"><div><span>Find a node</span><kbd>/</kbd></div><div><span>Open a graph</span><kbd>Ctrl / ⌘ + O</kbd></div><div><span>Fit the whole graph</span><kbd>F</kbd></div><div><span>Zoom in / out</span><span><kbd>+</kbd> <kbd>−</kbd></span></div><div><span>Clear selection / close panel</span><kbd>Esc</kbd></div></div><p class="help-note">Drag the canvas to pan. Scroll to zoom around your cursor. Select a node to inspect its connections, or double-click it to focus.</p></dialog>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

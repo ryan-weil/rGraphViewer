@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "lib": ["DOM", "DOM.Iterable", "ES2020"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "paths": {
+      "@msagl/core": ["./vendor/msagl/core/src/index.ts"],
+      "@msagl/drawing": ["./vendor/msagl/drawing/src/index.ts"],
+      "@msagl/parser": ["./vendor/msagl/parser/src/index.ts"],
+      "@msagl/renderer-common": ["./vendor/msagl/renderer-common/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts"]
+}

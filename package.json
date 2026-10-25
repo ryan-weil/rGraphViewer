@@ -1,0 +1,31 @@
+{
+  "name": "rgraphviewer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A focused, local-first DOT graph viewer with orthogonal routing.",
+  "license": "MIT",
+  "engines": {"node": ">=22"},
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/test.mjs"
+  },
+  "dependencies": {
+    "@deck.gl/core": "8.9.33",
+    "@deck.gl/layers": "8.9.33",
+    "dotparser": "1.1.1",
+    "parse-color": "1.0.0",
+    "queue-typescript": "1.0.1",
+    "reliable-random": "0.0.1",
+    "stack-typescript": "1.0.4",
+    "typescript-string-operations": "1.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.0",
+    "@types/parse-color": "^1.0.1",
+    "esbuild": "0.25.0",
+    "typescript": "4.9.5"
+  }
+}
