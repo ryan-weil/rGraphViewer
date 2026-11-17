@@ -28,7 +28,21 @@ Local corrections carried into this snapshot:
   line's justification (undefined when every line is centered), `copyValidFields`
   copies it with the label, and `graphToJSON` writes labels back as DOT label
   values, so the layout worker's round trip reads the same lines.
+- In layered (Sugiyama) layouts, rectilinear edges leave their source through the
+  node side that faces the next layer and enter their target through the side that
+  faces the previous layer: the bottom and the top for top-to-bottom layers
+  (`routing/rectilinear/layerSidePorts.ts`, called from `routeEdges` in
+  `layout/driver.ts`). Upstream routes every edge from a port at the node's center,
+  so edges left and entered nodes through any side. Each edge now gets its own port
+  on the node's boundary, spread around the middle of the side in the order of the
+  edges' other ends; a port on the boundary only opens outward, so the router
+  attaches no edge to another side. With different source and target ports, a
+  self-edge is routed as a rectilinear loop out of the bottom and into the top
+  instead of `GeomEdge.RouteSelfEdge`'s arc. `RectilinearEdgeRouter.constructorGNAN`
+  adds the routed edges' ports to their nodes' shapes, and layered drawings route
+  with a node padding of 4 instead of 1, so edges that pass a node keep clear of it.
 
 The focused regressions in `tests/engine.test.ts` protect the obstacle routing,
-label placement, fixed layout, color round trip, and label line ends. Updates to
-this snapshot must preserve those fixes until equivalent fixes are available upstream.
+label placement, fixed layout, color round trip, label line ends, and edge ends on
+the bottom and top of nodes. Updates to this snapshot must preserve those fixes
+until equivalent fixes are available upstream.

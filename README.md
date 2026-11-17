@@ -28,7 +28,8 @@ Set `PORT` to choose a different port.
 - Graphviz label line ends: `\n` centers a line, `\l` aligns it left, and `\r` aligns it right.
 - Light/dark mode with a saved preference and theme-aware graph colors.
 - Download a standalone SVG or the original graph source.
-- One layout: layered top-to-bottom. One routing mode: right-angle edges.
+- One layout: layered top-to-bottom. One routing mode: right-angle edges that leave a
+  node at its bottom and enter a node at its top, loops included.
 
 Keyboard: `/` searches, `Ctrl/Cmd+O` opens a graph, `F` fits, `+`/`-` zoom, and
 `Escape` clears the selection. Select a node for details; double-click to focus it.

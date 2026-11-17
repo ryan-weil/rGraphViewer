@@ -309,7 +309,8 @@ export class RectilinearEdgeRouter extends Algorithm {
   // but may select suboptimal paths</param>
   // If true, use obstacle bounding boxes in visibility graph
   static constructorGNAN(graph: GeomGraph, geomEdges: GeomEdge[], padding: number, cornerFitRadius: number): RectilinearEdgeRouter {
-    const ret = new RectilinearEdgeRouter(ShapeCreator.GetShapes(graph), padding, cornerFitRadius)
+    // The routed edges' own ports join their nodes' shapes, including edges inside clusters.
+    const ret = new RectilinearEdgeRouter(ShapeCreator.GetShapes(graph, geomEdges ?? undefined), padding, cornerFitRadius)
     if (geomEdges == null)
       for (const edge of graph.deepEdges) {
         ret.AddEdgeGeometryToRoute(edge)

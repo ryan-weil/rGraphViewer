@@ -63,6 +63,41 @@ function tallGraphLabelsAndRoutes() {
   assert.equal(labels.size, 201)
 }
 
+function edgesLeaveBottomsAndEnterTops() {
+  const graph = parseSource(String.raw`digraph { node [shape=box]
+    entry [label="entry:\lv0 = Load rsp\lJump loop\l"]
+    loop [label="loop:\lv1 = Add v0, 1\lv2 = Eq v1, 10\lBranch v2 ? exit : body\l"]
+    body [label="body:\lStore v1, v0\lBranch v1 ? body : loop\l"]
+    exit [label="exit:\lReturn\l"]
+    entry -> loop; loop -> exit [label="T"]; loop -> body [label="F"]
+    body -> body [label="T"]; body -> loop [label="F"]
+  }`, 'loop.dot')
+  ;(DrawingGraph.getDrawingObj(graph) as DrawingGraph).createGeometry(measure)
+  layoutGraph(graph, LAYOUT, true)
+  const geom = GeomGraph.getGeom(graph)
+  let edges = 0
+  for (const edge of geom.deepEdges) {
+    edges++
+    const name = `${edge.source.id} -> ${edge.target.id}`
+    const source = edge.source.boundingBox
+    const target = edge.target.boundingBox
+    const start = edge.curve.start
+    const tip = edge.targetArrowhead.tipPosition
+    // Leaves the source through its bottom, heading down, and enters the target through its top, from above.
+    assert.ok(Math.abs(start.y - source.bottom) < 1e-6 && start.x > source.left && start.x < source.right, `${name} leaves through the bottom`)
+    assert.ok(edge.curve.value(edge.curve.parStart + 0.01 * (edge.curve.parEnd - edge.curve.parStart)).y < start.y, `${name} heads down`)
+    assert.ok(Math.abs(tip.y - target.top) < 1e-6 && tip.x > target.left && tip.x < target.right, `${name} enters through the top`)
+    assert.ok(Math.abs(edge.curve.end.x - tip.x) < 1e-6 && edge.curve.end.y > tip.y, `${name} comes down into the target`)
+    for (const node of geom.nodesBreadthFirst) {
+      if (node === edge.source || node === edge.target) continue
+      const interior = node.boundingBox.clone()
+      interior.pad(-0.001)
+      assert.equal(Curve.getAllIntersections(edge.curve, interior.perimeter(), false).length, 0, `${name} crosses ${node.id}`)
+    }
+  }
+  assert.equal(edges, 5)
+}
+
 function colorRoundTrip() {
   const graph = parseJSON(graphToJSON(parseDot('digraph { a [fillcolor="#00ff88", fontcolor="#334455"]; a -> b }')))
   const drawing = DrawingNode.getDrawingObj(graph.findNode('a')) as DrawingNode
@@ -125,6 +160,7 @@ function invalidGraphs() {
 test('vertical visibility paths avoid successive obstacles', verticalObstacles)
 test('horizontal visibility paths avoid successive obstacles', horizontalObstacles)
 test('tall graph labels are placed and return edges avoid every unrelated node', tallGraphLabelsAndRoutes)
+test('edges, back edges and self-loops leave a node at its bottom and enter at its top', edgesLeaveBottomsAndEnterTops)
 test('DOT colors survive the layout worker serialization', colorRoundTrip)
 test('labels split at \\n, \\l and \\r and keep each line\'s justification', graphvizLineEscapes)
 test('label lines and justification survive the layout worker serialization', lineEscapesSurviveTheWorker)

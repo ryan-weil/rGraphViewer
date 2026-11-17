@@ -1,4 +1,5 @@
 import {RectilinearEdgeRouter} from '../routing/rectilinear/RectilinearEdgeRouter'
+import {attachEdgesToLayerSides} from '../routing/rectilinear/layerSidePorts'
 import {GeomGraph, optimalPackingRunner} from './core/geomGraph'
 import {CancelToken} from '../utils/cancelToken'
 import {Edge} from '../structs/edge'
@@ -145,10 +146,20 @@ export function getEdgeRoutingSettingsFromAncestorsOrDefault(geomGraph: GeomGrap
   return ers
 }
 
+/** Rectilinear padding around nodes in layered drawings; it stays below half the default node separation (10). */
+const LAYERED_NODE_PADDING = 4
+
 export function routeEdges(geomGraph: GeomGraph, edgesToRoute: GeomEdge[], cancelToken: CancelToken) {
   const ers: EdgeRoutingSettings = getEdgeRoutingSettingsFromAncestorsOrDefault(geomGraph)
   if (ers.EdgeRoutingMode === EdgeRoutingMode.Rectilinear) {
-    routeRectilinearEdges(geomGraph, edgesToRoute, cancelToken)
+    // Layered drawings attach edges where the layers face each other (bottom and top for top-to-bottom layers).
+    if (geomGraph.layoutSettings instanceof SugiyamaLayoutSettings) {
+      attachEdgesToLayerSides(edgesToRoute, geomGraph.layoutSettings.layerDirection)
+      // Edges that pass a node keep clear of it, so that they do not look attached to its side.
+      routeRectilinearEdges(geomGraph, edgesToRoute, cancelToken, LAYERED_NODE_PADDING)
+    } else {
+      routeRectilinearEdges(geomGraph, edgesToRoute, cancelToken)
+    }
   } else if (ers.EdgeRoutingMode === EdgeRoutingMode.Spline || ers.EdgeRoutingMode === EdgeRoutingMode.SplineBundling) {
     routeSplines(geomGraph, edgesToRoute, cancelToken)
   } else if (ers.EdgeRoutingMode === EdgeRoutingMode.StraightLine) {
