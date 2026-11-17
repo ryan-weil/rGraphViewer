@@ -25,6 +25,7 @@ Set `PORT` to choose a different port.
 - Compare scrolling live with the **Smooth scrolling** switch above the zoom controls:
   on uses smooth, gentler zoom; off restores the original immediate zoom and wheel sensitivity.
 - WebGL rendering for nodes, edges, arrowheads, shadows, and text using deck.gl.
+- Graphviz label line ends: `\n` centers a line, `\l` aligns it left, and `\r` aligns it right.
 - Light/dark mode with a saved preference and theme-aware graph colors.
 - Download a standalone SVG or the original graph source.
 - One layout: layered top-to-bottom. One routing mode: right-angle edges.

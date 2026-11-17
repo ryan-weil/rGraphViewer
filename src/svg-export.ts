@@ -1,4 +1,4 @@
-import {Position, Rgba, Scene, Theme, PALETTES} from './scene'
+import {LabelLine, Position, Rgba, Scene, Theme, PALETTES} from './scene'
 
 function escapeText(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -12,11 +12,10 @@ function path(points: Position[], close = false): string {
   return result + (close ? 'Z' : '')
 }
 
-function text(label: string, at: Position, size: number, ink: Rgba): string {
-  const lines = label.split('\n')
+function text(lines: LabelLine<unknown>[], size: number, ink: Rgba): string {
   let spans = ''
-  for (let i = 0; i < lines.length; i++) spans += `<tspan x="${at[0]}" y="${at[1] + (i - (lines.length - 1) / 2) * size * 1.2}">${escapeText(lines[i])}</tspan>`
-  return `<text fill="${color(ink)}" font-size="${size}" text-anchor="middle" dominant-baseline="central">${spans}</text>`
+  for (const line of lines) spans += `<tspan x="${line.position[0]}" y="${line.position[1]}" text-anchor="${line.anchor}">${escapeText(line.text)}</tspan>`
+  return `<text fill="${color(ink)}" font-size="${size}" dominant-baseline="central">${spans}</text>`
 }
 
 /** SVG is generated only when exporting; the interactive graph is entirely WebGL. */
@@ -30,10 +29,10 @@ export function exportSvg(scene: Scene, theme: Theme): string {
     `<rect x="${x}" y="${y}" width="${width}" height="${height}" fill="${color(PALETTES[theme].background)}"/>`]
   for (const edge of scene.edges) parts.push(`<path d="${path(edge.path)}" fill="none" stroke="${color(edge.ink)}" stroke-width="${edge.width}" stroke-linejoin="round"/>`)
   for (const arrow of scene.arrows) parts.push(`<path d="${path(arrow.path, true)}" fill="${color(arrow.edge.ink)}"/>`)
-  for (const edge of scene.edges) if (edge.label) parts.push(text(edge.label, edge.labelPosition, edge.fontSize, edge.labelInk))
+  for (const edge of scene.edges) if (edge.lines.length) parts.push(text(edge.lines, edge.fontSize, edge.labelInk))
   for (const node of scene.nodes) {
     parts.push(`<path d="${path(node.path, true)}" fill="${color(node.fill)}" stroke="${color(node.stroke)}" stroke-width="${node.width}"/>`)
-    parts.push(text(node.label, node.labelPosition, node.fontSize, node.ink))
+    parts.push(text(node.lines, node.fontSize, node.ink))
   }
   parts.push('</svg>')
   return parts.join('')

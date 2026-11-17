@@ -5,6 +5,8 @@ import {RankEnum} from './rankEnum'
 import {DirTypeEnum} from './dirTypeEnum'
 import {OrderingEnum} from './orderingEnum'
 import {Attribute, AttributeRegistry, Entity, LayerDirectionEnum, Size} from '@msagl/core'
+/** How one label line is justified, named after the DOT escape that ends it: centered (`\n`), left (`\l`) or right (`\r`). */
+export type LabelJustification = 'n' | 'l' | 'r'
 /** DrawingObject ment to be an attribute on an Entity, with some additional information necessery for rendering. Many fields of this class support of Dot language */
 export abstract class DrawingObject extends Attribute {
   rebind(e: Entity): void {
@@ -24,6 +26,7 @@ export abstract class DrawingObject extends Attribute {
     }
     if (source.labelText != null && source.labelText !== '' && source.labelText !== source.id) {
       target.labelText = source.labelText
+      target.labelLineJustification = source.labelLineJustification
     }
     if (source.fontColor) {
       target.fontColor = source.fontColor
@@ -106,6 +109,8 @@ export abstract class DrawingObject extends Attribute {
   public set labelText(value: string) {
     this._labelText = value
   }
+  /** The justification of each line of labelText; undefined when every line is centered. */
+  labelLineJustification: LabelJustification[]
   headlabel: string
   taillabel: string
   fontColor: Color

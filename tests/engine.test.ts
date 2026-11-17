@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {Curve, EdgeRoutingMode, GeomGraph, LineSegment, Point, Rectangle, Size} from '@msagl/core'
-import {DrawingGraph, DrawingNode} from '@msagl/drawing'
-import {graphToJSON, parseDot, parseJSON} from '@msagl/parser'
+import {Curve, EdgeRoutingMode, GeomGraph, Graph, LineSegment, Point, Rectangle, Size} from '@msagl/core'
+import {DrawingEdge, DrawingGraph, DrawingNode} from '@msagl/drawing'
+import {dotLabelValue, graphToJSON, parseDot, parseDotLabel, parseJSON} from '@msagl/parser'
 import {layoutGraph} from '../vendor/msagl/renderer-common/src/layout'
 import {RectilinearEdgeRouter} from '../vendor/msagl/core/src/routing/rectilinear/RectilinearEdgeRouter'
 import {Shape} from '../vendor/msagl/core/src/routing/shape'
@@ -70,6 +70,46 @@ function colorRoundTrip() {
   assert.deepEqual([drawing.fontColor.R, drawing.fontColor.G, drawing.fontColor.B], [51, 68, 85])
 }
 
+const LABELS = String.raw`digraph {
+  block [label="b0:  ; native 0x140387EC3\lv1:i64 = LoadIntelReg rsp\lv2:i64 = Add v1, 8\l"]
+  mixed [label="Title\nleft\lright\r"]
+  escaped [label="C:\\dir \{x\} \N"]
+  trailing [label="one\ntwo\n"]
+  block -> mixed [label="T\l"]
+}`
+
+function nodeLabel(graph: Graph, id: string) {
+  const drawing = DrawingNode.getDrawingObj(graph.findNode(id)) as DrawingNode
+  return [drawing.labelText, drawing.labelLineJustification]
+}
+
+function expectLabels(graph: Graph) {
+  assert.deepEqual(nodeLabel(graph, 'block'), ['b0:  ; native 0x140387EC3\nv1:i64 = LoadIntelReg rsp\nv2:i64 = Add v1, 8', ['l', 'l', 'l']])
+  assert.deepEqual(nodeLabel(graph, 'mixed'), ['Title\nleft\nright', ['n', 'l', 'r']])
+  assert.deepEqual(nodeLabel(graph, 'escaped'), ['C:\\dir {x} \\N', undefined])
+  assert.deepEqual(nodeLabel(graph, 'trailing'), ['one\ntwo', undefined])
+  const edge = DrawingEdge.getDrawingObj(Array.from(graph.deepEdges)[0]) as DrawingEdge
+  assert.deepEqual([edge.labelText, edge.labelLineJustification], ['T', ['l']])
+}
+
+function graphvizLineEscapes() { expectLabels(parseDot(LABELS)) }
+
+function lineEscapesSurviveTheWorker() {
+  // The layout worker serializes the graph twice: to the worker and back.
+  expectLabels(parseJSON(graphToJSON(parseJSON(graphToJSON(parseDot(LABELS))))))
+}
+
+function labelEscapes() {
+  assert.deepEqual(parseDotLabel('a\nb'), {text: 'a\nb', lineJustification: undefined})
+  assert.deepEqual(parseDotLabel('a\r\nb\\l'), {text: 'a\nb', lineJustification: ['n', 'l']})
+  assert.deepEqual(parseDotLabel('long \\\nline'), {text: 'long line', lineJustification: undefined})
+  assert.deepEqual(parseDotLabel('x\\l\\l'), {text: 'x\n', lineJustification: ['l', 'l']})
+  for (const value of ['a\\lb\\rc', 'end\\n\\n', 'x\\l\\l', '\\l', 'C:\\\\dir', '\\G', 'tail\\']) {
+    const label = parseDotLabel(value)
+    assert.deepEqual(parseDotLabel(dotLabelValue(label.text, label.lineJustification)), label, value)
+  }
+}
+
 function fixedLayout() {
   assert.equal(LAYOUT.layoutType, 'Sugiyama TB')
   assert.equal(LAYOUT.edgeRoutingMode, EdgeRoutingMode.Rectilinear)
@@ -86,5 +126,8 @@ test('vertical visibility paths avoid successive obstacles', verticalObstacles)
 test('horizontal visibility paths avoid successive obstacles', horizontalObstacles)
 test('tall graph labels are placed and return edges avoid every unrelated node', tallGraphLabelsAndRoutes)
 test('DOT colors survive the layout worker serialization', colorRoundTrip)
+test('labels split at \\n, \\l and \\r and keep each line\'s justification', graphvizLineEscapes)
+test('label lines and justification survive the layout worker serialization', lineEscapesSurviveTheWorker)
+test('label escapes follow Graphviz and written labels read back unchanged', labelEscapes)
 test('the viewer uses top-to-bottom layout and orthogonal routing', fixedLayout)
 test('invalid and empty sources produce useful errors', invalidGraphs)

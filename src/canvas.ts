@@ -2,24 +2,23 @@ import {Deck, OrthographicView, COORDINATE_SYSTEM} from '@deck.gl/core/typed'
 import {PathLayer, PolygonLayer, TextLayer} from '@deck.gl/layers/typed'
 import {GeomNode, Graph} from '@msagl/core'
 import {CameraPosition, MIN_SCALE, ZoomMotion, wheelZoomFactor, originalWheelZoomFactor, zoomImmediately} from './camera'
-import {ArrowItem, EdgeItem, NodeItem, ShadowItem, Scene, Theme, PALETTES, createScene, styleScene} from './scene'
+import {ArrowItem, EdgeItem, LabelLine, NodeItem, ShadowItem, Scene, Theme, PALETTES, createScene, styleScene} from './scene'
 import {exportSvg} from './svg-export'
 
 function nodePath(item: NodeItem) { return item.path }
 function nodeFill(item: NodeItem) { return item.fill }
 function nodeStroke(item: NodeItem) { return item.stroke }
-function nodeInk(item: NodeItem) { return item.ink }
 function nodeWidth(item: NodeItem) { return item.width }
-function nodeText(item: NodeItem) { return item.label }
-function nodeLabelPosition(item: NodeItem) { return item.labelPosition }
-function nodeFontSize(item: NodeItem) { return item.fontSize }
+function nodeLineInk(line: LabelLine<NodeItem>) { return line.owner.ink }
+function nodeLineSize(line: LabelLine<NodeItem>) { return line.owner.fontSize }
 function edgePath(item: EdgeItem) { return item.path }
 function edgeInk(item: EdgeItem) { return item.ink }
-function edgeLabelInk(item: EdgeItem) { return item.labelInk }
 function edgeWidth(item: EdgeItem) { return item.width }
-function edgeText(item: EdgeItem) { return item.label }
-function edgeLabelPosition(item: EdgeItem) { return item.labelPosition }
-function edgeFontSize(item: EdgeItem) { return item.fontSize }
+function edgeLineInk(line: LabelLine<EdgeItem>) { return line.owner.labelInk }
+function edgeLineSize(line: LabelLine<EdgeItem>) { return line.owner.fontSize }
+function lineText(line: LabelLine<unknown>) { return line.text }
+function linePosition(line: LabelLine<unknown>) { return line.position }
+function lineAnchor(line: LabelLine<unknown>) { return line.anchor }
 function arrowPath(item: ArrowItem) { return item.path }
 function arrowInk(item: ArrowItem) { return item.edge.ink }
 function shadowPath(item: ShadowItem) { return item.path }
@@ -98,18 +97,19 @@ export class GraphCanvas {
 
   private updateLayers() {
     if (!this.deck || !this.scene) return
-    const {nodes, edges, arrows, shadows} = this.scene
+    const {nodes, edges, arrows, shadows, nodeLabels, edgeLabels} = this.scene
     const common = {coordinateSystem: COORDINATE_SYSTEM.CARTESIAN, parameters: {depthTest: false}}
+    // One text object per label line: the scene places each line and chooses its anchor from the line's justification.
     const text = {...common, fontFamily: 'Segoe UI, Arial, sans-serif', fontWeight: 500, lineHeight: 1.2,
       characterSet: 'auto' as const, sizeUnits: 'common' as const, billboard: true,
-      fontSettings: {sdf: true, fontSize: 64, buffer: 8}, getTextAnchor: 'middle' as const, getAlignmentBaseline: 'center' as const}
+      fontSettings: {sdf: true, fontSize: 64, buffer: 8}, getText: lineText, getPosition: linePosition,
+      getTextAnchor: lineAnchor, getAlignmentBaseline: 'center' as const}
     this.deck.setProps({layers: [
       new PathLayer<EdgeItem>({...common, id: 'edges', data: edges, getPath: edgePath, getColor: edgeInk,
         getWidth: edgeWidth, widthUnits: 'common', widthMinPixels: 0.6, jointRounded: true, capRounded: true, pickable: true}),
       new PolygonLayer<ArrowItem>({...common, id: 'arrows', data: arrows, getPolygon: arrowPath, getFillColor: arrowInk,
         stroked: false, pickable: true}),
-      new TextLayer<EdgeItem>({...text, id: 'edge-labels', data: edges, getText: edgeText,
-        getPosition: edgeLabelPosition, getSize: edgeFontSize, getColor: edgeLabelInk,
+      new TextLayer<LabelLine<EdgeItem>>({...text, id: 'edge-labels', data: edgeLabels, getSize: edgeLineSize, getColor: edgeLineInk,
         outlineWidth: 0.2, outlineColor: [...PALETTES[this.theme].background]}),
       new PolygonLayer<ShadowItem>({...common, id: 'node-shadows', data: shadows, getPolygon: shadowPath,
         getFillColor: shadowInk, stroked: false}),
@@ -117,8 +117,7 @@ export class GraphCanvas {
         getFillColor: nodeFill, stroked: false, pickable: true}),
       new PathLayer<NodeItem>({...common, id: 'node-outlines', data: nodes, getPath: nodePath,
         getColor: nodeStroke, getWidth: nodeWidth, widthUnits: 'common', widthMinPixels: 0.6, jointRounded: true}),
-      new TextLayer<NodeItem>({...text, id: 'node-labels', data: nodes, getText: nodeText,
-        getPosition: nodeLabelPosition, getSize: nodeFontSize, getColor: nodeInk}),
+      new TextLayer<LabelLine<NodeItem>>({...text, id: 'node-labels', data: nodeLabels, getSize: nodeLineSize, getColor: nodeLineInk}),
     ]})
   }
 

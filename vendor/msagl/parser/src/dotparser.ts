@@ -38,6 +38,7 @@ import {
 } from '@msagl/drawing'
 
 import {parseColor} from './utils'
+import {dotLabelValue, parseDotLabel} from './label'
 
 function parseAttrOnDrawingObj(entity: Entity, drawingObj: DrawingObject, o: any) {
   for (const attr of o.attr_list) {
@@ -156,25 +157,14 @@ function parseAttrOnDrawingObj(entity: Entity, drawingObj: DrawingObject, o: any
           drawingObj.headlabel = str
           break
         case 'label':
-          // ignore html labels, for example
-
+          // HTML labels are objects and are ignored.
           if (typeof str === 'string') {
-            // ignore html labels, for example
-            const find = '\\n'
-            let j = 0
-            drawingObj.labelText = ''
-            do {
-              const i = str.indexOf(find, j)
-              if (i >= 0) {
-                drawingObj.labelText += str.substring(j, i) + '\n'
-                j = i + 2
-              } else {
-                drawingObj.labelText += str.substring(j)
-                break
-              }
-            } while (true)
+            const label = parseDotLabel(str)
+            drawingObj.labelText = label.text
+            drawingObj.labelLineJustification = label.lineJustification
           } else if (typeof str === 'number') {
             drawingObj.labelText = str.toString()
+            drawingObj.labelLineJustification = undefined
           }
 
           if (entity instanceof Edge) {
@@ -983,7 +973,8 @@ function* attrIter(drObj: DrawingObject): IterableIterator<Attr> {
     yield {type: 'attr', id: 'labelfontcolor', eq: colorAttributeValue(drObj.labelfontcolor)}
   }
   if (!(drObj.labelText == null || drObj.labelText === '') && drObj.entity && drObj.labelText !== drObj.id) {
-    yield {type: 'attr', id: 'label', eq: drObj.labelText}
+    // Written as a DOT label so that parsing the JSON again yields the same lines and justification.
+    yield {type: 'attr', id: 'label', eq: dotLabelValue(drObj.labelText, drObj.labelLineJustification)}
   }
   if (drObj.fontColor) {
     yield {type: 'attr', id: 'fontcolor', eq: colorAttributeValue(drObj.fontColor)}

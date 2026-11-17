@@ -7,7 +7,8 @@ export const LAYOUT: LayoutOptions = {
   layoutType: 'Sugiyama TB',
   edgeRoutingMode: EdgeRoutingMode.Rectilinear,
   smoothCorners: false,
-  label: {fontFamily: 'Segoe UI, sans-serif', fontSize: 13, lineHeight: 1},
+  // Labels are drawn at weight 500 (canvas.ts, svg-export.ts); measuring at that weight sizes nodes to the drawn text.
+  label: {fontFamily: 'Segoe UI, sans-serif', fontSize: 13, lineHeight: 1, fontWeight: 500},
 }
 
 export function parseSource(source: string, name: string): Graph {
