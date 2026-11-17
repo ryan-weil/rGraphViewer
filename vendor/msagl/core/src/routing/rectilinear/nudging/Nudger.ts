@@ -999,6 +999,12 @@ export class Nudger {
     nudger.Calculate(Direction.North, true)
     nudger.Calculate(Direction.East, false)
     nudger.Calculate(Direction.North, false)
+    // Moving vertical segments lengthens or shortens the horizontal ones between them, so the last North pass can
+    // stretch a horizontal segment alongside another that the East pass never separated it from (they did not
+    // overlap then), leaving the two on top of each other. Another East pass separates them, and a North pass
+    // separates the vertical segments that pass moves.
+    nudger.Calculate(Direction.East, false)
+    nudger.Calculate(Direction.North, false)
     if (removeStaircases) {
       nudger.RemoveStaircases()
     }

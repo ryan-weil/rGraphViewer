@@ -207,6 +207,12 @@ function resolveLayoutSettings(root: DrawingGraph, subgraph: GeomGraph, override
     layoutSettings.edgeRoutingSettings.smoothCorners = overrides.smoothCorners
   }
 
+  if (layoutSettings instanceof SugiyamaLayoutSettings) {
+    if (overrides.layerSeparation != null) layoutSettings.LayerSeparation = overrides.layerSeparation
+    // SugiyamaLayoutSettings.NodeSeparation has no setter; the value lives in the common settings.
+    if (overrides.nodeSeparation != null) layoutSettings.commonSettings.NodeSeparation = overrides.nodeSeparation
+  }
+
   return layoutSettings
 }
 
@@ -228,7 +234,9 @@ function diffLayoutSettings(
   const layerDirectionChange =
     oldSettings instanceof SugiyamaLayoutSettings &&
     newSettings instanceof SugiyamaLayoutSettings &&
-    (<SugiyamaLayoutSettings>oldSettings).layerDirection != (<SugiyamaLayoutSettings>newSettings).layerDirection
+    ((<SugiyamaLayoutSettings>oldSettings).layerDirection != (<SugiyamaLayoutSettings>newSettings).layerDirection ||
+      oldSettings.LayerSeparation !== newSettings.LayerSeparation ||
+      oldSettings.NodeSeparation !== newSettings.NodeSeparation)
   return {
     layoutChanged: oldSettings.constructor !== newSettings.constructor || specialCaseSugiamaRelayout || layerDirectionChange,
     routingChanged,

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {Curve, EdgeRoutingMode, GeomGraph, Graph, LineSegment, Point, Rectangle, Size} from '@msagl/core'
+import {Curve, EdgeRoutingMode, GeomEdge, GeomGraph, Graph, ICurve, LineSegment, Point, Polyline, Rectangle, Size} from '@msagl/core'
 import {DrawingEdge, DrawingGraph, DrawingNode} from '@msagl/drawing'
 import {dotLabelValue, graphToJSON, parseDot, parseDotLabel, parseJSON} from '@msagl/parser'
 import {layoutGraph} from '../vendor/msagl/renderer-common/src/layout'
@@ -98,6 +98,59 @@ function edgesLeaveBottomsAndEnterTops() {
   assert.equal(edges, 5)
 }
 
+type AxisSegment = {edge: GeomEdge; vertical: boolean; at: number; low: number; high: number}
+
+function collectCorners(curve: ICurve, points: Point[]) {
+  if (curve instanceof Curve) for (const segment of curve.segs) collectCorners(segment, points)
+  else if (curve instanceof Polyline) for (const point of curve) points.push(point)
+  else points.push(curve.start, curve.end)
+}
+
+function axisSegments(edge: GeomEdge, segments: AxisSegment[]) {
+  const points: Point[] = []
+  collectCorners(edge.curve, points)
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]
+    const b = points[i]
+    if (Math.abs(a.x - b.x) < 1e-6 && Math.abs(a.y - b.y) > 1) segments.push({edge, vertical: true, at: a.x, low: Math.min(a.y, b.y), high: Math.max(a.y, b.y)})
+    else if (Math.abs(a.y - b.y) < 1e-6 && Math.abs(a.x - b.x) > 1) segments.push({edge, vertical: false, at: a.y, low: Math.min(a.x, b.x), high: Math.max(a.x, b.x)})
+  }
+}
+
+/** The smallest distance between two parallel segments of different edges that run side by side. */
+function closestSideBySideEdges(geom: GeomGraph): number {
+  const segments: AxisSegment[] = []
+  for (const edge of geom.deepEdges) axisSegments(edge, segments)
+  let closest = Infinity
+  for (let i = 0; i < segments.length; i++) {
+    for (let j = i + 1; j < segments.length; j++) {
+      const a = segments[i]
+      const b = segments[j]
+      if (a.edge === b.edge || a.vertical !== b.vertical || Math.min(a.high, b.high) - Math.max(a.low, b.low) <= 1) continue
+      closest = Math.min(closest, Math.abs(a.at - b.at))
+    }
+  }
+  return closest
+}
+
+function edgesDoNotRunTogether() {
+  // Two branches leave entry toward the same side, four paths join, and the loop returns to the top.
+  const graph = parseSource(String.raw`digraph { node [shape=box]
+    entry [label="entry:\lv0 = Load rsp\lSwitch v0\l"]
+    a [label="a:\lv1 = Add v0, 1\l"]; b [label="b:\lv2 = Add v0, 2\l"]
+    c [label="c:\lv3 = Add v0, 3\l"]; d [label="d:\lv4 = Add v0, 4\l"]
+    join [label="join:\lv5 = Phi v1, v2, v3, v4\lBranch v5 ? entry : exit\l"]
+    exit [label="exit:\lReturn v5\l"]
+    entry -> a; entry -> b; entry -> c; entry -> d
+    a -> join; b -> join; c -> join; d -> join
+    join -> entry [label="T"]; join -> exit [label="F"]
+  }`, 'fan.dot')
+  ;(DrawingGraph.getDrawingObj(graph) as DrawingGraph).createGeometry(measure)
+  layoutGraph(graph, LAYOUT, true)
+  const closest = closestSideBySideEdges(GeomGraph.getGeom(graph))
+  assert.ok(closest >= 8, `two edges run side by side ${closest.toFixed(1)} apart`)
+}
+
 function colorRoundTrip() {
   const graph = parseJSON(graphToJSON(parseDot('digraph { a [fillcolor="#00ff88", fontcolor="#334455"]; a -> b }')))
   const drawing = DrawingNode.getDrawingObj(graph.findNode('a')) as DrawingNode
@@ -161,6 +214,7 @@ test('vertical visibility paths avoid successive obstacles', verticalObstacles)
 test('horizontal visibility paths avoid successive obstacles', horizontalObstacles)
 test('tall graph labels are placed and return edges avoid every unrelated node', tallGraphLabelsAndRoutes)
 test('edges, back edges and self-loops leave a node at its bottom and enter at its top', edgesLeaveBottomsAndEnterTops)
+test('edges that run side by side keep apart instead of overlapping', edgesDoNotRunTogether)
 test('DOT colors survive the layout worker serialization', colorRoundTrip)
 test('labels split at \\n, \\l and \\r and keep each line\'s justification', graphvizLineEscapes)
 test('label lines and justification survive the layout worker serialization', lineEscapesSurviveTheWorker)

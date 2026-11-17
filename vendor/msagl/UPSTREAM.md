@@ -39,10 +39,22 @@ Local corrections carried into this snapshot:
   attaches no edge to another side. With different source and target ports, a
   self-edge is routed as a rectilinear loop out of the bottom and into the top
   instead of `GeomEdge.RouteSelfEdge`'s arc. `RectilinearEdgeRouter.constructorGNAN`
-  adds the routed edges' ports to their nodes' shapes, and layered drawings route
-  with a node padding of 4 instead of 1, so edges that pass a node keep clear of it.
+  adds the routed edges' ports to their nodes' shapes.
+- Layered drawings keep edges apart. `routeEdges` routes them with a node padding
+  of up to 8 (a quarter of the node separation at most; upstream used 1) and keeps
+  parallel segments 12 apart (upstream 6). Note that the nudger keeps parallel
+  segments twice its edge separation argument apart, so the router is passed 6.
+  `LayoutOptions` in renderer-common gained `layerSeparation` and `nodeSeparation`
+  for layered layouts, which `diffLayoutSettings` also compares;
+  `SugiyamaLayoutSettings.NodeSeparation` has only a getter, so the value is set on
+  `commonSettings`. The viewer uses 60 and 40 (upstream defaults 30 and 10) to make
+  room for edges between rows and between neighboring nodes.
+- `Nudger.NudgePaths` runs one more East and North pass after its usual North, East,
+  North. Moving vertical segments in the last North pass lengthens horizontal
+  segments, which could stretch one alongside another it was never separated from
+  and leave the two on top of each other.
 
 The focused regressions in `tests/engine.test.ts` protect the obstacle routing,
-label placement, fixed layout, color round trip, label line ends, and edge ends on
-the bottom and top of nodes. Updates to this snapshot must preserve those fixes
-until equivalent fixes are available upstream.
+label placement, fixed layout, color round trip, label line ends, edge ends on the
+bottom and top of nodes, and edges kept apart. Updates to this snapshot must
+preserve those fixes until equivalent fixes are available upstream.

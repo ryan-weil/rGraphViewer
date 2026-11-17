@@ -9,6 +9,9 @@ export const LAYOUT: LayoutOptions = {
   smoothCorners: false,
   // Labels are drawn at weight 500 (canvas.ts, svg-export.ts); measuring at that weight sizes nodes to the drawn text.
   label: {fontFamily: 'Segoe UI, sans-serif', fontSize: 13, lineHeight: 1, fontWeight: 500},
+  // Room between rows and between neighboring nodes for edges to run side by side without overlapping.
+  layerSeparation: 60,
+  nodeSeparation: 40,
 }
 
 export function parseSource(source: string, name: string): Graph {

@@ -11,4 +11,8 @@ export type LayoutOptions = {
   label?: Partial<TextMeasurerOptions>
   edgeRoutingMode?: EdgeRoutingMode
   smoothCorners?: boolean
+  /** Layered layouts: the least distance between neighboring layers. */
+  layerSeparation?: number
+  /** Layered layouts: the least distance between neighboring nodes of a layer. */
+  nodeSeparation?: number
 }

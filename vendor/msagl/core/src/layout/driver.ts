@@ -146,17 +146,23 @@ export function getEdgeRoutingSettingsFromAncestorsOrDefault(geomGraph: GeomGrap
   return ers
 }
 
-/** Rectilinear padding around nodes in layered drawings; it stays below half the default node separation (10). */
-const LAYERED_NODE_PADDING = 4
+/** Largest rectilinear padding around nodes in layered drawings. */
+const LAYERED_NODE_PADDING = 8
+/** Distance between parallel edge segments in layered drawings. */
+const LAYERED_EDGE_GAP = 12
 
 export function routeEdges(geomGraph: GeomGraph, edgesToRoute: GeomEdge[], cancelToken: CancelToken) {
   const ers: EdgeRoutingSettings = getEdgeRoutingSettingsFromAncestorsOrDefault(geomGraph)
   if (ers.EdgeRoutingMode === EdgeRoutingMode.Rectilinear) {
     // Layered drawings attach edges where the layers face each other (bottom and top for top-to-bottom layers).
-    if (geomGraph.layoutSettings instanceof SugiyamaLayoutSettings) {
-      attachEdgesToLayerSides(edgesToRoute, geomGraph.layoutSettings.layerDirection)
-      // Edges that pass a node keep clear of it, so that they do not look attached to its side.
-      routeRectilinearEdges(geomGraph, edgesToRoute, cancelToken, LAYERED_NODE_PADDING)
+    const settings = geomGraph.layoutSettings
+    if (settings instanceof SugiyamaLayoutSettings) {
+      attachEdgesToLayerSides(edgesToRoute, settings.layerDirection)
+      // Edges that pass a node keep clear of it, so that they do not look attached to its side. The padding stays
+      // well below the node separation, so that edges still fit between the nodes of a layer.
+      const padding = Math.min(LAYERED_NODE_PADDING, settings.NodeSeparation / 4)
+      // The nudger keeps parallel segments twice its edge separation argument apart.
+      routeRectilinearEdges(geomGraph, edgesToRoute, cancelToken, padding, 3, LAYERED_EDGE_GAP / 2)
     } else {
       routeRectilinearEdges(geomGraph, edgesToRoute, cancelToken)
     }
