@@ -34,6 +34,7 @@ import {XLayoutGraph} from './xLayoutGraph'
 import {Rectangle} from '../../math/geometry/rectangle'
 import {NetworkSimplex} from './layering/NetworkSimplex'
 import {Routing} from './routing'
+import {OrthogonalLayeredRouting} from './orthogonalRouting'
 import {PlaneTransformation} from '../../math/geometry/planeTransformation'
 import {EdgeRoutingMode} from '../../routing/EdgeRoutingMode'
 import {EdgeRoutingSettings} from '../../routing/EdgeRoutingSettings'
@@ -125,8 +126,17 @@ export class LayeredLayout extends Algorithm {
     }
     preRunTransform(this.originalGraph, this.sugiyamaSettings.transform)
     this.engineLayerArrays = this.calculateLayers()
-    if (this.sugiyamaSettings.edgeRoutingSettings.EdgeRoutingMode === EdgeRoutingMode.SugiyamaSplines) {
+    const mode = this.sugiyamaSettings.edgeRoutingSettings.EdgeRoutingMode
+    if (mode === EdgeRoutingMode.SugiyamaSplines) {
       this.runPostLayering()
+    } else if (
+      mode === EdgeRoutingMode.Rectilinear &&
+      this.sugiyamaSettings.transform.isIdentity() &&
+      OrthogonalLayeredRouting.canRoute(this.originalGraph)
+    ) {
+      // Route along the columns the layout reserved, so that edges cross only where the layer order makes them;
+      // the edges this leaves unrouted go to the rectilinear router afterwards.
+      new OrthogonalLayeredRouting(this.originalGraph, this.database, this.engineLayerArrays, this.IntGraph).run()
     }
     postRunTransform(this.originalGraph, this.sugiyamaSettings.transform)
   }

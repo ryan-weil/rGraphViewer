@@ -151,6 +151,42 @@ function edgesDoNotRunTogether() {
   assert.ok(closest >= 8, `two edges run side by side ${closest.toFixed(1)} apart`)
 }
 
+/** The number of places where a segment of one edge crosses or touches a segment of another. */
+function edgeCrossings(geom: GeomGraph): number {
+  const segments: AxisSegment[] = []
+  for (const edge of geom.deepEdges) axisSegments(edge, segments)
+  let crossings = 0
+  for (let i = 0; i < segments.length; i++) {
+    for (let j = i + 1; j < segments.length; j++) {
+      const a = segments[i]
+      const b = segments[j]
+      if (a.edge === b.edge || a.vertical === b.vertical) continue
+      const vertical = a.vertical ? a : b
+      const horizontal = a.vertical ? b : a
+      if (horizontal.low - 1e-6 < vertical.at && vertical.at < horizontal.high + 1e-6 && vertical.low - 1e-6 < horizontal.at && horizontal.at < vertical.high + 1e-6) crossings++
+    }
+  }
+  return crossings
+}
+
+function loopsGoAroundWithoutCrossing() {
+  // Four branches join again; three loops go back to the top: from the outer branches and from the join.
+  const graph = parseSource(String.raw`digraph { node [shape=box]
+    entry [label="entry:\lv0 = Load rsp\lSwitch v0\l"]
+    a [label="a:\lv1 = Add v0, 1\l"]; b [label="b:\lv2 = Add v0, 2\l"]
+    c [label="c:\lv3 = Add v0, 3\l"]; d [label="d:\lv4 = Add v0, 4\l"]
+    join [label="join:\lv5 = Phi v1, v2, v3, v4\lBranch v5 ? entry : exit\l"]
+    exit [label="exit:\lReturn v5\l"]
+    entry -> a; entry -> b; entry -> c; entry -> d
+    a -> join; b -> join; c -> join; d -> join
+    join -> entry [label="T"]; join -> exit [label="F"]
+    a -> entry; d -> entry
+  }`, 'loops.dot')
+  ;(DrawingGraph.getDrawingObj(graph) as DrawingGraph).createGeometry(measure)
+  layoutGraph(graph, LAYOUT, true)
+  assert.equal(edgeCrossings(GeomGraph.getGeom(graph)), 0)
+}
+
 function colorRoundTrip() {
   const graph = parseJSON(graphToJSON(parseDot('digraph { a [fillcolor="#00ff88", fontcolor="#334455"]; a -> b }')))
   const drawing = DrawingNode.getDrawingObj(graph.findNode('a')) as DrawingNode
@@ -215,6 +251,7 @@ test('horizontal visibility paths avoid successive obstacles', horizontalObstacl
 test('tall graph labels are placed and return edges avoid every unrelated node', tallGraphLabelsAndRoutes)
 test('edges, back edges and self-loops leave a node at its bottom and enter at its top', edgesLeaveBottomsAndEnterTops)
 test('edges that run side by side keep apart instead of overlapping', edgesDoNotRunTogether)
+test('loops go around the blocks they close instead of crossing other edges', loopsGoAroundWithoutCrossing)
 test('DOT colors survive the layout worker serialization', colorRoundTrip)
 test('labels split at \\n, \\l and \\r and keep each line\'s justification', graphvizLineEscapes)
 test('label lines and justification survive the layout worker serialization', lineEscapesSurviveTheWorker)

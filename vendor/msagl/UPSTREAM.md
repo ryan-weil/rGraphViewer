@@ -28,9 +28,28 @@ Local corrections carried into this snapshot:
   line's justification (undefined when every line is centered), `copyValidFields`
   copies it with the label, and `graphToJSON` writes labels back as DOT label
   values, so the layout worker's round trip reads the same lines.
-- In layered (Sugiyama) layouts, rectilinear edges leave their source through the
-  node side that faces the next layer and enter their target through the side that
-  faces the previous layer: the bottom and the top for top-to-bottom layers
+- Top-to-bottom layered (Sugiyama) layouts with rectilinear routing route their edges
+  inside `LayeredLayout.run()` with `layout/layered/orthogonalRouting.ts`, while the
+  layout's own vertices still exist. Upstream left these edges to the rectilinear
+  router, which routes every edge on its own and ignores the order the layout chose
+  to keep crossings down, so edges crossed far more often than the layer order makes
+  them (on IR3's control-flow dumps: 58 crossings instead of 8 on a 292-edge graph).
+  Every edge leaves its source at the bottom and enters its target at the top. A
+  downward edge passes the layers between its ends through the layout's vertices for
+  it. An edge drawn upward closes a loop (the vertices below its target that reach
+  its source); it leaves its source at the bottom, goes up around the loop just
+  outside its outermost vertex of every layer, on the side where it crosses fewer
+  edges, and enters its target at the top; inner loops are placed first so outer
+  ones go around them. A self-edge goes around its node. Between two layers, every
+  horizontal segment gets its own track, ordered so that it does not cut through the
+  vertical segments of other edges where the order allows; layers move apart when a
+  channel needs more tracks, and vertices of a layer move apart when the columns
+  beside them need room. Ends on one node side are ordered by where their edges go.
+  Flat edges and graphs with clusters keep the rectilinear router below.
+- In layered (Sugiyama) layouts, the rectilinear router (used for the edges the
+  router above does not route, and for other layer directions) makes edges leave
+  their source through the node side that faces the next layer and enter their
+  target through the side that faces the previous layer: the bottom and the top for top-to-bottom layers
   (`routing/rectilinear/layerSidePorts.ts`, called from `routeEdges` in
   `layout/driver.ts`). Upstream routes every edge from a port at the node's center,
   so edges left and entered nodes through any side. Each edge now gets its own port
@@ -56,5 +75,6 @@ Local corrections carried into this snapshot:
 
 The focused regressions in `tests/engine.test.ts` protect the obstacle routing,
 label placement, fixed layout, color round trip, label line ends, edge ends on the
-bottom and top of nodes, and edges kept apart. Updates to this snapshot must
-preserve those fixes until equivalent fixes are available upstream.
+bottom and top of nodes, edges kept apart, and loops that go around instead of
+crossing. Updates to this snapshot must preserve those fixes until equivalent fixes
+are available upstream.
