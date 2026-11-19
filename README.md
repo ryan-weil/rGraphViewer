@@ -30,8 +30,9 @@ Set `PORT` to choose a different port.
 - Download a standalone SVG or the original graph source.
 - One layout: layered top-to-bottom. One routing mode: right-angle edges that leave a
   node at its bottom and enter a node at its top, follow the layer order so that they
-  cross only where it makes them, go around the loops they close, and keep apart
-  from each other where they run side by side.
+  cross only where it makes them, go around the loops they close, turn as few times
+  as the room between nodes allows, and keep apart from each other where they run
+  side by side.
 
 Keyboard: `/` searches, `Ctrl/Cmd+O` opens a graph, `F` fits, `+`/`-` zoom, and
 `Escape` clears the selection. Select a node for details; double-click to focus it.

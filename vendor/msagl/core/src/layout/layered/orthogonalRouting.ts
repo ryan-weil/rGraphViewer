@@ -22,6 +22,12 @@ const CORNER_CLEARANCE = 8
 const CORNER_RADIUS = 3
 /** Sort keys that put detour ends outside every edge end that heads toward a column. */
 const OUTSIDE = 1e12
+/** What straightening an edge weighs: a bend more than any sideways run, a sideways run a little more in a lower
+ * channel (so that of two equal ways the edge takes the one that turns toward its target sooner and then goes
+ * straight down into it), and moving a vertex least of all. */
+const BEND_COST = 1e7
+const LOWER_CHANNEL_COST = 1e-3
+const MOVE_COST = 1e-6
 
 /** Where a net's end meets its channel: the side the edge comes from or goes to. */
 const enum Side {
@@ -79,6 +85,9 @@ class Detour {
 class Rail {
   index = 0
   x = 0
+  /** Where the edge passes the layers above and below: its columns there. */
+  above: Detour | Rail | number = null
+  below: Detour | Rail | number = null
   constructor(readonly vertex: number, readonly right: boolean) {}
 }
 
@@ -95,7 +104,20 @@ class Plan {
   highDetour: Detour = null
   /** For an upward edge, the column of every layer strictly between its ends, from the top: a rail or a vertex. */
   columns: Array<Rail | number> = null
+  way: EdgeWay = null
   constructor(readonly e: PolyIntEdge, readonly chain: number[], readonly upward: boolean) {}
+}
+
+/** A place where an edge meets a side of a layer: an end on a node's side, a vertex the edge passes through, or a
+ * column beside a vertex. */
+type Pin = End | Detour | Rail | number
+
+/** The vertices of one layer that take room, from left to right, with where each one stands in that order. */
+class Row {
+  index = new Map<number, number>()
+  constructor(readonly vertices: number[]) {
+    for (let i = 0; i < vertices.length; i++) this.index.set(vertices[i], i)
+  }
 }
 
 /** The way of one edge: its two ends and its nets, in drawing order. */
@@ -133,6 +155,9 @@ export class OrthogonalLayeredRouting {
   private rails = new Map<number, Rail[]>()
   private element: boolean[]
   private sketches = new Map<Channel, Sketch[]>()
+  /** For every layer, the places where edges meet its bottom side and its top side. */
+  private facingDown = new Map<number, Pin[]>()
+  private facingUp = new Map<number, Pin[]>()
 
   constructor(
     private readonly graph: GeomGraph,
@@ -199,19 +224,26 @@ export class OrthogonalLayeredRouting {
         start = this.addEnd(this.bottomEnds, low, detourKey(plan.lowDetour))
         end = this.addEnd(this.topEnds, high, detourKey(plan.highDetour))
       }
-      this.ways.push(new EdgeWay(plan.e.edge, start, end))
+      plan.way = new EdgeWay(plan.e.edge, start, end)
+      this.ways.push(plan.way)
     }
+    const selfWays: EdgeWay[] = []
     for (const e of selfEdges) {
       const detour = selfDetours.get(e)
-      this.ways.push(new EdgeWay(e.edge, this.addEnd(this.bottomEnds, e.source, detourKey(detour)), this.addEnd(this.topEnds, e.source, detourKey(detour))))
+      const way = new EdgeWay(e.edge, this.addEnd(this.bottomEnds, e.source, detourKey(detour)), this.addEnd(this.topEnds, e.source, detourKey(detour)))
+      selfWays.push(way)
+      this.ways.push(way)
     }
     this.placeEnds(this.bottomEnds, false)
     this.placeEnds(this.topEnds, true)
+    const upward: Plan[] = []
+    for (let i = ordered.length - 1; i >= 0; i--) upward.push(ordered[i].plan)
+    for (const plan of plans) if (plan.upward && !loops.has(plan)) upward.push(plan)
+    this.straighten(plans, upward, anchors)
 
     // Nets, channel by channel, in drawing order.
-    let wayIndex = 0
-    for (const plan of plans) this.createNets(this.ways[wayIndex++], plan, anchors)
-    for (const e of selfEdges) this.createSelfNets(this.ways[wayIndex++], e.source, selfDetours.get(e))
+    for (const plan of plans) this.createNets(plan.way, plan, anchors)
+    for (let i = 0; i < selfEdges.length; i++) this.createSelfNets(selfWays[i], selfEdges[i].source, selfDetours.get(selfEdges[i]))
 
     this.assignTracksAndSpreadLayers(anchors)
     this.updateNodeCenters(anchors)
@@ -338,6 +370,12 @@ export class OrthogonalLayeredRouting {
     for (let i = 0; i < outer.length; i++) {
       if (outer[i] < 0) plan.columns.push(chain[i + 1])
       else plan.columns.push(this.addRail(outer[i], right))
+    }
+    for (let i = 0; i < plan.columns.length; i++) {
+      const column = plan.columns[i]
+      if (typeof column === 'number') continue
+      column.above = i === 0 ? plan.highDetour : plan.columns[i - 1]
+      column.below = i + 1 === plan.columns.length ? plan.lowDetour : plan.columns[i + 1]
     }
     for (const [channel, sketch] of this.loopSketches(plan, outer, right, anchors)) this.addSketch(channel, sketch)
   }
@@ -521,6 +559,285 @@ export class OrthogonalLayeredRouting {
     }
   }
 
+  /** Moves the layout's vertices of downward edges, and the columns of upward edges, sideways inside the room their
+   * layers leave them, so that the edges bend less: where the room allows, a downward edge's vertices line up under
+   * its start or over its end and the edge goes straight down, and an upward edge goes up in one column. A vertex
+   * never passes another vertex of its layer or the columns beside one, and a column stays between its vertex and
+   * the vertex's neighbor, inside the columns that were outside it, so the order of every layer stays as it was, and
+   * with it the order of the ends on every node side and the crossings the layer order makes. `upward` lists the
+   * upward edges, those that go around larger loops first. */
+  private straighten(plans: Plan[], upward: Plan[], anchors: Anchor[]) {
+    const rows = this.buildRows(plans, anchors)
+    this.collectPins(rows)
+    const owners = new Map<number, number>()
+    for (const plan of plans) for (let i = 1; i + 1 < plan.chain.length; i++) owners.set(plan.chain[i], (owners.get(plan.chain[i]) ?? 0) + 1)
+    // a second round lets edges use room their neighbors have left since
+    for (let round = 0; round < 2; round++) {
+      for (const plan of plans) if (!plan.upward && plan.chain.length > 2) this.straightenVertices(plan, rows, owners, anchors)
+    }
+    for (let round = 0; round < 2; round++) for (const plan of upward) this.straightenColumns(plan, rows, anchors)
+  }
+
+  /** The vertices of every layer that take room, from left to right: nodes, the vertices of the edges drawn through
+   * them, and the vertices upward edges pass layers through. */
+  private buildRows(plans: Plan[], anchors: Anchor[]): Map<number, Row> {
+    const taken = this.element.slice()
+    for (const plan of plans) if (plan.columns != null) for (const c of plan.columns) if (typeof c === 'number') taken[c] = true
+    const rows = new Map<number, Row>()
+    for (const layer of this.layersTopDown) {
+      const vertices: number[] = []
+      for (const v of this.layerArrays.Layers[layer]) if (taken[v]) vertices.push(v)
+      vertices.sort(compareByX.bind(null, anchors))
+      rows.set(layer, new Row(vertices))
+    }
+    return rows
+  }
+
+  /** Lists where edges meet the bottom and the top side of every layer, from left to right: the ends on the nodes'
+   * bottoms and tops, the vertices edges pass through, and the columns beside the vertices. Straightening keeps
+   * the order of every layer, so the lists stay in order. */
+  private collectPins(rows: Map<number, Row>) {
+    for (const layer of this.layersTopDown) {
+      const down: Pin[] = []
+      const up: Pin[] = []
+      for (const v of rows.get(layer).vertices) {
+        const left = this.columnsOf(v, false)
+        for (let i = left.length - 1; i >= 0; i--) {
+          down.push(left[i])
+          up.push(left[i])
+        }
+        if (v < this.intGraph.nodeCount) {
+          const bottoms = this.bottomEnds.get(v)
+          if (bottoms != null) for (const end of bottoms) down.push(end)
+          const tops = this.topEnds.get(v)
+          if (tops != null) for (const end of tops) up.push(end)
+        } else {
+          down.push(v)
+          up.push(v)
+        }
+        for (const column of this.columnsOf(v, true)) {
+          down.push(column)
+          up.push(column)
+        }
+      }
+      this.facingDown.set(layer, down)
+      this.facingUp.set(layer, up)
+    }
+  }
+
+  /** Whether a vertical at x comes closer than GAP to a place where another edge meets the bottom side (`down`) or
+   * the top side of layer `layer` (-1: no layer). `own` is the edge's own place there; the other ends on its node
+   * side are spaced where the ends are placed. */
+  private crowds(x: number, layer: number, down: boolean, own: Pin, anchors: Anchor[]): boolean {
+    if (layer < 0) return false
+    const pins = (down ? this.facingDown : this.facingUp).get(layer)
+    // the first place right of x - GAP
+    let low = 0
+    let high = pins.length
+    while (low < high) {
+      const middle = (low + high) >> 1
+      if (pinX(pins[middle], anchors) <= x - GAP) low = middle + 1
+      else high = middle
+    }
+    for (let i = low; i < pins.length && pinX(pins[i], anchors) < x + GAP; i++) {
+      const pin = pins[i]
+      if (pin === own || (pin instanceof End && own instanceof End && pin.node === own.node)) continue
+      return true
+    }
+    return false
+  }
+
+  /** The candidate places (`values`, sorted, each once) in a range where a vertical keeps clear of the other edges'
+   * places on the facing sides of the layers above (`upper`) and below (`lower`), with the edge's own places there;
+   * the place where it stands now is always one. The list is sorted. */
+  private allowedPlaces(
+    values: number[],
+    original: number,
+    low: number,
+    high: number,
+    upper: number,
+    upperOwn: Pin,
+    lower: number,
+    lowerOwn: Pin,
+    anchors: Anchor[],
+  ): number[] {
+    const list: number[] = []
+    for (let i = firstAtLeast(values, low); i < values.length && values[i] <= high; i++) {
+      const x = values[i]
+      if (x === original || !(this.crowds(x, upper, true, upperOwn, anchors) || this.crowds(x, lower, false, lowerOwn, anchors))) list.push(x)
+    }
+    return list
+  }
+
+  private layerAbove(layer: number): number {
+    const rank = this.rank.get(layer)
+    return rank === 0 ? -1 : this.layersTopDown[rank - 1]
+  }
+
+  private layerBelow(layer: number): number {
+    const rank = this.rank.get(layer)
+    return rank + 1 === this.layersTopDown.length ? -1 : this.layersTopDown[rank + 1]
+  }
+
+  /** The columns beside a vertex on one side, from the inside out: its detours, then the rails beside it. */
+  private columnsOf(vertex: number, right: boolean): Array<Detour | Rail> {
+    const list: Array<Detour | Rail> = []
+    const detours = this.detours.get(vertex)
+    if (detours != null) for (const detour of detours) if (detour.right === right) list.push(detour)
+    const rails = this.rails.get(vertex)
+    if (rails != null) for (const rail of rails) if (rail.right === right) list.push(rail)
+    return list
+  }
+
+  /** Whether a vertex takes the room of its box in its layer: a node does, and so does a vertex that keeps room for an
+   * edge label; the layout's other vertices are only where an edge passes. */
+  private hasBox(v: number, anchors: Anchor[]): boolean {
+    return v < this.intGraph.nodeCount || anchors[v].labelIsToTheLeftOfTheSpline || anchors[v].labelIsToTheRightOfTheSpline
+  }
+
+  private boxLeft(v: number, anchors: Anchor[]): number {
+    return this.hasBox(v, anchors) ? anchors[v].left : anchors[v].x
+  }
+
+  private boxRight(v: number, anchors: Anchor[]): number {
+    return this.hasBox(v, anchors) ? anchors[v].right : anchors[v].x
+  }
+
+  /** The leftmost x a vertex takes in its layer: its outermost column on the left, or else its own left side. */
+  private outerLeft(v: number, anchors: Anchor[]): number {
+    let x = this.boxLeft(v, anchors)
+    for (const column of this.columnsOf(v, false)) x = Math.min(x, column.x)
+    return x
+  }
+
+  private outerRight(v: number, anchors: Anchor[]): number {
+    let x = this.boxRight(v, anchors)
+    for (const column of this.columnsOf(v, true)) x = Math.max(x, column.x)
+    return x
+  }
+
+  /** Lines up the vertices of one downward edge as well as the room beside them allows; the rails beside a vertex
+   * move with it. */
+  private straightenVertices(plan: Plan, rows: Map<number, Row>, owners: Map<number, number>, anchors: Anchor[]) {
+    const chain = plan.chain
+    const last = chain.length - 1
+    const originals: number[] = []
+    const lows: number[] = []
+    const highs: number[] = []
+    for (let i = 1; i < last; i++) {
+      const v = chain[i]
+      const x = anchors[v].x
+      let low = x
+      let high = x
+      if (v >= this.intGraph.nodeCount && this.element[v] && owners.get(v) === 1) {
+        // the vertex and its columns keep their distance from the neighbors and the neighbors' columns
+        const row = rows.get(this.layerOfVertex[v])
+        const index = row.index.get(v)
+        low = index > 0 ? Math.min(x, this.outerRight(row.vertices[index - 1], anchors) + GAP + (x - this.outerLeft(v, anchors))) : Number.NEGATIVE_INFINITY
+        high =
+          index + 1 < row.vertices.length ? Math.max(x, this.outerLeft(row.vertices[index + 1], anchors) - GAP - (this.outerRight(v, anchors) - x)) : Number.POSITIVE_INFINITY
+      }
+      originals.push(x)
+      lows.push(low)
+      highs.push(high)
+    }
+    const values = candidatePlaces(plan.way.start.x, plan.way.end.x, originals, lows, highs)
+    const options: number[][] = []
+    for (let i = 1; i < last; i++) {
+      const upper = this.layerOfVertex[chain[i - 1]]
+      const lower = this.layerOfVertex[chain[i + 1]]
+      const upperOwn: Pin = i === 1 ? plan.way.start : chain[i - 1]
+      const lowerOwn: Pin = i + 1 === last ? plan.way.end : chain[i + 1]
+      const list = this.allowedPlaces(values, originals[i - 1], lows[i - 1], highs[i - 1], upper, upperOwn, lower, lowerOwn, anchors)
+      const rails = this.rails.get(chain[i])
+      options.push(rails == null ? list : this.railsKeepClear(list, originals[i - 1], rails, upper, lower, anchors))
+    }
+    const way = straightestWay(plan.way.start.x, plan.way.end.x, originals, options)
+    for (let i = 0; i < way.length; i++) {
+      const v = chain[i + 1]
+      const shift = way[i] - anchors[v].x
+      if (shift === 0) continue
+      anchors[v].x = way[i]
+      const rails = this.rails.get(v)
+      if (rails != null) for (const rail of rails) rail.x += shift
+    }
+  }
+
+  /** The places of a vertex at which the rails beside it, which move with it, keep clear of the other edges' places
+   * on the facing sides of the layers above and below. */
+  private railsKeepClear(list: number[], original: number, rails: Rail[], upper: number, lower: number, anchors: Anchor[]): number[] {
+    const kept: number[] = []
+    for (const x of list) {
+      let clear = true
+      for (const rail of rails) {
+        const at = rail.x + x - original
+        if (x !== original && (this.crowds(at, upper, true, rail.above, anchors) || this.crowds(at, lower, false, rail.below, anchors))) {
+          clear = false
+          break
+        }
+      }
+      if (clear) kept.push(x)
+    }
+    return kept
+  }
+
+  /** Lines up the columns of one upward edge, from the detour beside its upper node through the rails to the detour
+   * beside its lower node, as well as the room beside them allows. */
+  private straightenColumns(plan: Plan, rows: Map<number, Row>, anchors: Anchor[]) {
+    const columns: Array<Detour | Rail | number> = [plan.highDetour]
+    for (const column of plan.columns) columns.push(column)
+    columns.push(plan.lowDetour)
+    const originals: number[] = []
+    const lows: number[] = []
+    const highs: number[] = []
+    for (const column of columns) {
+      if (typeof column === 'number') {
+        originals.push(anchors[column].x)
+        lows.push(anchors[column].x)
+        highs.push(anchors[column].x)
+        continue
+      }
+      // between the column inside it (or its vertex) and the column outside it (or the next vertex of the layer)
+      const owner = column instanceof Detour ? column.node : column.vertex
+      const list = this.columnsOf(owner, column.right)
+      const t = list.indexOf(column)
+      const row = rows.get(this.layerOfVertex[owner])
+      const index = row.index.get(owner)
+      let low: number
+      let high: number
+      if (column.right) {
+        low = (t === 0 ? this.boxRight(owner, anchors) : list[t - 1].x) + GAP
+        if (t + 1 < list.length) high = list[t + 1].x - GAP
+        else high = index + 1 < row.vertices.length ? this.outerLeft(row.vertices[index + 1], anchors) - GAP : Number.POSITIVE_INFINITY
+      } else {
+        high = (t === 0 ? this.boxLeft(owner, anchors) : list[t - 1].x) - GAP
+        if (t + 1 < list.length) low = list[t + 1].x + GAP
+        else low = index > 0 ? this.outerRight(row.vertices[index - 1], anchors) + GAP : Number.NEGATIVE_INFINITY
+      }
+      originals.push(column.x)
+      lows.push(Math.min(low, column.x))
+      highs.push(Math.max(high, column.x))
+    }
+    // the edge comes down from its upper node's top into the first column and goes from the last one to its lower
+    // node's bottom
+    const chain = plan.chain
+    const values = candidatePlaces(plan.way.end.x, plan.way.start.x, originals, lows, highs)
+    const options: number[][] = []
+    for (let i = 0; i < columns.length; i++) {
+      const layer = this.layerOfVertex[chain[i]]
+      const upper = i === 0 ? this.layerAbove(layer) : this.layerOfVertex[chain[i - 1]]
+      const lower = i + 1 === columns.length ? this.layerBelow(layer) : this.layerOfVertex[chain[i + 1]]
+      const upperOwn: Pin = i === 0 ? null : columns[i - 1]
+      const lowerOwn: Pin = i + 1 === columns.length ? null : columns[i + 1]
+      options.push(this.allowedPlaces(values, originals[i], lows[i], highs[i], upper, upperOwn, lower, lowerOwn, anchors))
+    }
+    const way = straightestWay(plan.way.end.x, plan.way.start.x, originals, options)
+    for (let i = 0; i < columns.length; i++) {
+      const column = columns[i]
+      if (typeof column !== 'number') column.x = way[i]
+    }
+  }
+
   private channelUnder(vertex: number): Channel {
     return this.channelBelow.get(this.layerOfVertex[vertex])
   }
@@ -682,6 +999,122 @@ function compareByX(anchors: Anchor[], a: number, b: number): number {
   return anchors[a].x - anchors[b].x
 }
 
+/** The places worth trying for the places an edge passes between its two ends, sorted, each once: the ends, where
+ * the places stand now, and the ends of their ranges. */
+function candidatePlaces(first: number, last: number, originals: number[], lows: number[], highs: number[]): number[] {
+  const values: number[] = [first, last]
+  for (let i = 0; i < originals.length; i++) {
+    values.push(originals[i])
+    if (Number.isFinite(lows[i])) values.push(lows[i])
+    if (Number.isFinite(highs[i])) values.push(highs[i])
+  }
+  values.sort(byValue)
+  let count = 0
+  for (const value of values) if (count === 0 || values[count - 1] !== value) values[count++] = value
+  values.length = count
+  return values
+}
+
+function byValue(a: number, b: number): number {
+  return a - b
+}
+
+/** The index of the first value at least `x` in a sorted list. */
+function firstAtLeast(values: number[], x: number): number {
+  let low = 0
+  let high = values.length
+  while (low < high) {
+    const middle = (low + high) >> 1
+    if (values[middle] < x) low = middle + 1
+    else high = middle
+  }
+  return low
+}
+
+/** Where the places an edge passes between its two fixed ends stand, each at one of its `options` (sorted), the
+ * places listed from the edge's upper end; chosen by dynamic programming: fewest bends first, then the shortest
+ * sideways runs (a little shorter in a lower channel, so that of two equal ways the edge turns toward its target
+ * sooner), then the smallest moves from `originals`. */
+function straightestWay(first: number, last: number, originals: number[], options: number[][]): number[] {
+  // cost[k]: the least cost of the edge from its first end to place i standing at options[i][k]; from[i][k]: the
+  // index of where place i - 1 stands on that way
+  const from: number[][] = []
+  let previous: number[] = [first]
+  let previousCost: number[] = [0]
+  for (let i = 0; i < options.length; i++) {
+    const list = options[i]
+    const cost = new Array<number>(list.length)
+    const back = new Array<number>(list.length)
+    cheapestSteps(previous, previousCost, list, 1 + i * LOWER_CHANNEL_COST, cost, back)
+    for (let k = 0; k < list.length; k++) cost[k] += MOVE_COST * Math.abs(list[k] - originals[i])
+    from.push(back)
+    previous = list
+    previousCost = cost
+  }
+  const end = [last]
+  const endCost = [0]
+  const endBack = [0]
+  cheapestSteps(previous, previousCost, end, 1 + options.length * LOWER_CHANNEL_COST, endCost, endBack)
+  const way = new Array<number>(options.length)
+  let k = endBack[0]
+  for (let i = options.length - 1; i >= 0; i--) {
+    way[i] = options[i][k]
+    k = from[i][k]
+  }
+  return way
+}
+
+/** For every place x of `list`, the cheapest step from one of the places of `previous` (whose ways cost
+ * `previousCost`): straight down from the same x, or a bend and a sideways run that costs `weight` a unit. Both lists
+ * are sorted. Fills `cost` and `back` (the index in `previous` the cheapest step comes from). */
+function cheapestSteps(previous: number[], previousCost: number[], list: number[], weight: number, cost: number[], back: number[]) {
+  // from the left: the least previousCost[j] + weight * (x - previous[j]) over previous[j] <= x
+  let j = 0
+  let best = Number.POSITIVE_INFINITY
+  let bestAt = -1
+  for (let k = 0; k < list.length; k++) {
+    for (; j < previous.length && previous[j] <= list[k]; j++) {
+      const c = previousCost[j] - weight * previous[j]
+      if (c < best) {
+        best = c
+        bestAt = j
+      }
+    }
+    cost[k] = bestAt < 0 ? Number.POSITIVE_INFINITY : best + weight * list[k] + BEND_COST
+    back[k] = bestAt
+  }
+  // from the right: the least previousCost[j] + weight * (previous[j] - x) over previous[j] >= x
+  j = previous.length - 1
+  best = Number.POSITIVE_INFINITY
+  bestAt = -1
+  for (let k = list.length - 1; k >= 0; k--) {
+    for (; j >= 0 && previous[j] >= list[k]; j--) {
+      const c = previousCost[j] + weight * previous[j]
+      if (c < best) {
+        best = c
+        bestAt = j
+      }
+    }
+    if (bestAt >= 0 && best - weight * list[k] + BEND_COST < cost[k]) {
+      cost[k] = best - weight * list[k] + BEND_COST
+      back[k] = bestAt
+    }
+  }
+  // straight down from the same x, with no bend
+  j = 0
+  for (let k = 0; k < list.length; k++) {
+    while (j < previous.length && previous[j] < list[k]) j++
+    if (j < previous.length && previous[j] === list[k] && previousCost[j] < cost[k]) {
+      cost[k] = previousCost[j]
+      back[k] = j
+    }
+  }
+}
+
+function pinX(pin: Pin, anchors: Anchor[]): number {
+  return typeof pin === 'number' ? anchors[pin].x : pin.x
+}
+
 function detourKey(detour: Detour): number {
   // the innermost detour takes the outermost end of its side, so that the ways around the node nest
   return detour.right ? OUTSIDE - detour.index : -OUTSIDE + detour.index
@@ -708,25 +1141,32 @@ function pinsOn(net: Net, side: Side): number[] {
   return pins
 }
 
-/** Orders the horizontal nets of a channel into tracks, track 0 at the top. A net must run below another whose
- * horizontal segment it would otherwise cross with a vertical end coming down from the top, and above one it would
- * cross going on down to the bottom; when such demands form a cycle, the crossing cannot be avoided and the
- * demand closing the cycle is dropped. Nets whose spans overlap never share a track. Returns the number of tracks. */
+/** Orders the horizontal nets of a channel into tracks, track 0 at the top. Of two nets, the one whose order makes
+ * them cross fewer times must run above the other; two nets that cross as often in either order demand nothing of
+ * each other, so that they cannot override the demands of nets that need not cross. When the demands form a cycle,
+ * the demand closing the cycle is dropped. Nets whose spans overlap never share a track. Returns the number of
+ * tracks. */
 function assignTracks(nets: Net[]): number {
   const horizontal: Net[] = []
   for (const net of nets) if (!net.straight) horizontal.push(net)
   const below = new Map<Net, Net[]>()
   for (const net of horizontal) below.set(net, [])
+  for (let i = 0; i < horizontal.length; i++) {
+    for (let j = i + 1; j < horizontal.length; j++) {
+      const a = horizontal[i]
+      const b = horizontal[j]
+      const aAbove = crossingsAbove(a, b)
+      const bAbove = crossingsAbove(b, a)
+      if (aAbove < bAbove) below.get(a).push(b)
+      else if (bAbove < aAbove) below.get(b).push(a)
+    }
+  }
   for (const a of horizontal) {
     for (const b of horizontal) {
       if (a === b) continue
-      for (const x of pinsOn(a, Side.Top)) {
-        if (b.low < x && x < b.high) below.get(a).push(b)
-        // a vertical coming down from the top close to one going on down to the bottom: the first must turn above
-        // the second, or the two run along each other between their tracks
-        for (const y of pinsOn(b, Side.Bottom)) if (Math.abs(x - y) < GAP) below.get(a).push(b)
-      }
-      for (const x of pinsOn(a, Side.Bottom)) if (b.low < x && x < b.high) below.get(b).push(a)
+      // a vertical coming down from the top close to one going on down to the bottom: the first must turn above
+      // the second, or the two run along each other between their tracks
+      for (const x of pinsOn(a, Side.Top)) for (const y of pinsOn(b, Side.Bottom)) if (Math.abs(x - y) < GAP) below.get(a).push(b)
     }
   }
   const order = topologicalOrder(horizontal, below)
@@ -756,6 +1196,15 @@ function assignTracks(nets: Net[]): number {
     tracks = Math.max(tracks, track + 1)
   }
   return tracks
+}
+
+/** How many times two nets of a channel cross when `a` runs on a track above `b`: a's verticals that go on down to
+ * the bottom through b's horizontal segment, and b's verticals that come down from the top through a's. */
+function crossingsAbove(a: Net, b: Net): number {
+  let count = 0
+  for (const x of pinsOn(a, Side.Bottom)) if (b.low < x && x < b.high) count++
+  for (const x of pinsOn(b, Side.Top)) if (a.low < x && x < a.high) count++
+  return count
 }
 
 /** A topological order of the nets by the "must run above" demands, dropping the demands that close cycles. */

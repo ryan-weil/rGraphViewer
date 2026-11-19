@@ -40,9 +40,19 @@ Local corrections carried into this snapshot:
   its source); it leaves its source at the bottom, goes up around the loop just
   outside its outermost vertex of every layer, on the side where it crosses fewer
   edges, and enters its target at the top; inner loops are placed first so outer
-  ones go around them. A self-edge goes around its node. Between two layers, every
-  horizontal segment gets its own track, ordered so that it does not cut through the
-  vertical segments of other edges where the order allows; layers move apart when a
+  ones go around them. A self-edge goes around its node. Once the ends are placed, the
+  layout's vertices of downward edges and the columns of upward edges slide sideways
+  inside the room their layers leave them, to the places where the edge bends least
+  (dynamic programming over candidate places: fewest bends, then the shortest sideways
+  runs, then the smallest moves). A downward edge lines up under its start or over its
+  end where the room allows, so that it turns once and goes straight down into its
+  target instead of going sideways and back, and a loop goes up in one column. Nothing
+  passes another vertex or column of its layer, so the layer order and the crossings it
+  makes stay, and nothing comes within 12 of where another edge meets a neighboring
+  layer. Between two layers, every horizontal segment gets its own track: of two
+  segments, the one whose order makes them cross fewer times runs above the other, two
+  that cross as often in either order demand nothing of each other, and a vertical
+  coming down close to one going on down turns above it. Layers move apart when a
   channel needs more tracks, and vertices of a layer move apart when the columns
   beside them need room. Ends on one node side are ordered by where their edges go.
   Flat edges and graphs with clusters keep the rectilinear router below.
@@ -75,6 +85,6 @@ Local corrections carried into this snapshot:
 
 The focused regressions in `tests/engine.test.ts` protect the obstacle routing,
 label placement, fixed layout, color round trip, label line ends, edge ends on the
-bottom and top of nodes, edges kept apart, and loops that go around instead of
-crossing. Updates to this snapshot must preserve those fixes until equivalent fixes
-are available upstream.
+bottom and top of nodes, edges kept apart, loops that go around instead of crossing,
+and edges that go straight where their rows leave room. Updates to this snapshot must
+preserve those fixes until equivalent fixes are available upstream.

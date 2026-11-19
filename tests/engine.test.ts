@@ -187,6 +187,52 @@ function loopsGoAroundWithoutCrossing() {
   assert.equal(edgeCrossings(GeomGraph.getGeom(graph)), 0)
 }
 
+/** The pieces of an edge from its start: V for a vertical piece, L or R for a horizontal one; corner arcs are left out. */
+function edgeShape(edge: GeomEdge): string {
+  const points: Point[] = []
+  collectCorners(edge.curve, points)
+  let shape = ''
+  for (let i = 1; i < points.length; i++) {
+    const dx = points[i].x - points[i - 1].x
+    const dy = points[i].y - points[i - 1].y
+    // a corner arc moves both ways at once
+    if (Math.abs(dx) > 1e-6 === Math.abs(dy) > 1e-6) continue
+    const piece = Math.abs(dy) > 1e-6 ? 'V' : dx > 0 ? 'R' : 'L'
+    if (!shape.endsWith(piece)) shape += piece
+  }
+  return shape
+}
+
+function edgesBendAsLittleAsTheyCan() {
+  // A loop with two ways back to its head; the branch labels give the layout rows of their own, whose vertices it
+  // places to one side of the edges' ends.
+  const graph = parseSource(String.raw`digraph { node [shape=box]
+    a [label="a:\lv0 = Load rsp\lBranch v0 ? b : x\l"]
+    b [label="b:\lv1 = Phi v0, v4\lv2 = Lt v1, 10\lBranch v2 ? c : d\l"]
+    c [label="c:\lv3 = Add v1, 1\lBranch v3 ? b : e\l"]
+    d [label="d:\lv4 = Sub v1, 1\lJump e\l"]
+    e [label="e:\lv5 = Phi v3, v4\lBranch v5 ? b : x\l"]
+    x [label="x:\lReturn v1\l"]
+    a -> b [label="F"]; a -> x [label="T"]
+    b -> c [label="T"]; b -> d [label="F"]
+    c -> b [label="T"]; c -> e [label="F"]
+    d -> e
+    e -> b [label="T"]; e -> x [label="F"]
+  }`, 'bends.dot')
+  ;(DrawingGraph.getDrawingObj(graph) as DrawingGraph).createGeometry(measure)
+  layoutGraph(graph, LAYOUT, true)
+  const geom = GeomGraph.getGeom(graph)
+  for (const edge of geom.deepEdges) {
+    const shape = edgeShape(edge)
+    const sideways = shape.replace(/V/g, '').length
+    const name = `${edge.source.id} -> ${edge.target.id} (${shape})`
+    // down with at most one run sideways, and straight down into the target; a loop goes up in one column
+    if (edge.target.boundingBox.top < edge.source.boundingBox.bottom) assert.ok(sideways <= 1, `${name} turns sideways more than once`)
+    else assert.equal(sideways, 2, `${name} goes up in more than one column`)
+  }
+  assert.equal(edgeCrossings(geom), 0)
+}
+
 function colorRoundTrip() {
   const graph = parseJSON(graphToJSON(parseDot('digraph { a [fillcolor="#00ff88", fontcolor="#334455"]; a -> b }')))
   const drawing = DrawingNode.getDrawingObj(graph.findNode('a')) as DrawingNode
@@ -252,6 +298,7 @@ test('tall graph labels are placed and return edges avoid every unrelated node',
 test('edges, back edges and self-loops leave a node at its bottom and enter at its top', edgesLeaveBottomsAndEnterTops)
 test('edges that run side by side keep apart instead of overlapping', edgesDoNotRunTogether)
 test('loops go around the blocks they close instead of crossing other edges', loopsGoAroundWithoutCrossing)
+test('edges go straight down where their rows leave room, and loops go up in one column', edgesBendAsLittleAsTheyCan)
 test('DOT colors survive the layout worker serialization', colorRoundTrip)
 test('labels split at \\n, \\l and \\r and keep each line\'s justification', graphvizLineEscapes)
 test('label lines and justification survive the layout worker serialization', lineEscapesSurviveTheWorker)
