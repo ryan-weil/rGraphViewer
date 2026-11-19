@@ -78,6 +78,12 @@ Local corrections carried into this snapshot:
   `SugiyamaLayoutSettings.NodeSeparation` has only a getter, so the value is set on
   `commonSettings`. The viewer uses 60 and 40 (upstream defaults 30 and 10) to make
   room for edges between rows and between neighboring nodes.
+- Edge labels without a side of their own (`PlacementSide.Any`) go below a horizontal
+  stretch of their edge and right of a vertical one, as seen on the screen (the
+  geometry's y grows upward), and on the other side only where that side is blocked
+  (`EdgeLabelPlacement.ScreenSides`). Upstream tried the right-hand side of the edge's
+  direction of travel first, so a label sat above an edge that runs left, below one
+  that runs right, and left of one that runs down.
 - `Nudger.NudgePaths` runs one more East and North pass after its usual North, East,
   North. Moving vertical segments in the last North pass lengthens horizontal
   segments, which could stretch one alongside another it was never separated from
@@ -86,5 +92,6 @@ Local corrections carried into this snapshot:
 The focused regressions in `tests/engine.test.ts` protect the obstacle routing,
 label placement, fixed layout, color round trip, label line ends, edge ends on the
 bottom and top of nodes, edges kept apart, loops that go around instead of crossing,
-and edges that go straight where their rows leave room. Updates to this snapshot must
-preserve those fixes until equivalent fixes are available upstream.
+edges that go straight where their rows leave room, and labels that keep to one side
+of their edges. Updates to this snapshot must preserve those fixes until equivalent
+fixes are available upstream.

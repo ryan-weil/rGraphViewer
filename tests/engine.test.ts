@@ -203,22 +203,24 @@ function edgeShape(edge: GeomEdge): string {
   return shape
 }
 
+/** A loop with two ways back to its head. The branch labels give the layout rows of their own, whose vertices it
+ * places to one side of the edges' ends, and the labeled edges turn left and right, run down and go up. */
+const BRANCHES = String.raw`digraph { node [shape=box]
+  a [label="a:\lv0 = Load rsp\lBranch v0 ? b : x\l"]
+  b [label="b:\lv1 = Phi v0, v4\lv2 = Lt v1, 10\lBranch v2 ? c : d\l"]
+  c [label="c:\lv3 = Add v1, 1\lBranch v3 ? b : e\l"]
+  d [label="d:\lv4 = Sub v1, 1\lJump e\l"]
+  e [label="e:\lv5 = Phi v3, v4\lBranch v5 ? b : x\l"]
+  x [label="x:\lReturn v1\l"]
+  a -> b [label="F"]; a -> x [label="T"]
+  b -> c [label="T"]; b -> d [label="F"]
+  c -> b [label="T"]; c -> e [label="F"]
+  d -> e
+  e -> b [label="T"]; e -> x [label="F"]
+}`
+
 function edgesBendAsLittleAsTheyCan() {
-  // A loop with two ways back to its head; the branch labels give the layout rows of their own, whose vertices it
-  // places to one side of the edges' ends.
-  const graph = parseSource(String.raw`digraph { node [shape=box]
-    a [label="a:\lv0 = Load rsp\lBranch v0 ? b : x\l"]
-    b [label="b:\lv1 = Phi v0, v4\lv2 = Lt v1, 10\lBranch v2 ? c : d\l"]
-    c [label="c:\lv3 = Add v1, 1\lBranch v3 ? b : e\l"]
-    d [label="d:\lv4 = Sub v1, 1\lJump e\l"]
-    e [label="e:\lv5 = Phi v3, v4\lBranch v5 ? b : x\l"]
-    x [label="x:\lReturn v1\l"]
-    a -> b [label="F"]; a -> x [label="T"]
-    b -> c [label="T"]; b -> d [label="F"]
-    c -> b [label="T"]; c -> e [label="F"]
-    d -> e
-    e -> b [label="T"]; e -> x [label="F"]
-  }`, 'bends.dot')
+  const graph = parseSource(BRANCHES, 'branches.dot')
   ;(DrawingGraph.getDrawingObj(graph) as DrawingGraph).createGeometry(measure)
   layoutGraph(graph, LAYOUT, true)
   const geom = GeomGraph.getGeom(graph)
@@ -231,6 +233,36 @@ function edgesBendAsLittleAsTheyCan() {
     else assert.equal(sideways, 2, `${name} goes up in more than one column`)
   }
   assert.equal(edgeCrossings(geom), 0)
+}
+
+function labelsKeepToOneSide() {
+  const graph = parseSource(BRANCHES, 'branches.dot')
+  ;(DrawingGraph.getDrawingObj(graph) as DrawingGraph).createGeometry(measure)
+  layoutGraph(graph, LAYOUT, true)
+  let labels = 0
+  for (const edge of GeomGraph.getGeom(graph).deepEdges) {
+    if (edge.label == null) continue
+    labels++
+    // the piece of the edge closest to the label's center
+    const center = edge.label.boundingBox.center
+    const segments: AxisSegment[] = []
+    axisSegments(edge, segments)
+    let closest: AxisSegment = null
+    let distance = Infinity
+    for (const segment of segments) {
+      const along = Math.max(segment.low, Math.min(segment.high, segment.vertical ? center.y : center.x))
+      const d = segment.vertical ? Math.hypot(center.x - segment.at, center.y - along) : Math.hypot(center.x - along, center.y - segment.at)
+      if (d < distance) {
+        distance = d
+        closest = segment
+      }
+    }
+    // on the screen, where the geometry's y grows upward: below a horizontal piece, right of a vertical one
+    const name = `${edge.source.id} -> ${edge.target.id}`
+    if (closest.vertical) assert.ok(center.x > closest.at, `${name}: the label is left of its edge`)
+    else assert.ok(center.y < closest.at, `${name}: the label is above its edge`)
+  }
+  assert.equal(labels, 8)
 }
 
 function colorRoundTrip() {
@@ -299,6 +331,7 @@ test('edges, back edges and self-loops leave a node at its bottom and enter at i
 test('edges that run side by side keep apart instead of overlapping', edgesDoNotRunTogether)
 test('loops go around the blocks they close instead of crossing other edges', loopsGoAroundWithoutCrossing)
 test('edges go straight down where their rows leave room, and loops go up in one column', edgesBendAsLittleAsTheyCan)
+test('edge labels sit below horizontal lines and right of vertical ones, whichever way the edge runs', labelsKeepToOneSide)
 test('DOT colors survive the layout worker serialization', colorRoundTrip)
 test('labels split at \\n, \\l and \\r and keep each line\'s justification', graphvizLineEscapes)
 test('label lines and justification survive the layout worker serialization', lineEscapesSurviveTheWorker)

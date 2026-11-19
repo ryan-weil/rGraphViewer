@@ -29,7 +29,8 @@ export enum LabelPlacementResult {
 
 export enum PlacementSide {
   /**
-    //Places the label on any side
+    //Places the label on any side: below a horizontal line or right of a vertical one on the screen where it can,
+    //else on the other side (see ScreenSides)
     */
   Any,
 
@@ -545,8 +546,18 @@ export class EdgeLabelPlacement extends Algorithm {
         }
         return [derivative.y < 0 ? 1 : -1]
       default:
-        return [-1, 1]
+        return EdgeLabelPlacement.ScreenSides(derivative)
     }
+  }
+
+  /** The two sides of a line, the first one putting a label below a horizontal line or right of a vertical one on the
+   * screen (where the geometry's y grows upward), so that labels keep to one side whichever way their edges run. */
+  static ScreenSides(derivative: Point): number[] {
+    // GetLabelBounds puts a label toward derivative.rotate(PI / 2) * side, that is (-derivative.y, derivative.x) * side
+    let preferred: number
+    if (Math.abs(derivative.x) >= Math.abs(derivative.y)) preferred = derivative.x > 0 ? -1 : 1
+    else preferred = derivative.y > 0 ? -1 : 1
+    return [preferred, -preferred]
   }
 
   public static *ExpandingSearch(start: number, min: number, max: number): IterableIterator<number> {
